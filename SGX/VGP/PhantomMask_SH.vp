@@ -1,0 +1,85 @@
+!!IMGvp1.0
+# Port of the PowerVR SDK OGLES2 PhantomMask SHVertShader.vsh to IMG VGP.
+# Implements the same nine-term (second-order) spherical-harmonic irradiance
+# evaluation and passes the result as primary vertex colour.
+#
+# Inputs:
+#   vertex.position     object-space position, with w=1
+#   vertex.normal       input normal
+#   vertex.texcoord[0]  texture coordinates
+#
+# Environment parameter layout for the full VGP generic target:
+#   env[0..3]   state.matrix.mvp (automatic state parameters)
+#   env[4..6]   Model 3x3, uploaded as three ROW vectors (xyz used)
+#   env[7]      cAr
+#   env[8]      cAg
+#   env[9]      cAb
+#   env[10]     cBr
+#   env[11]     cBg
+#   env[12]     cBb
+#   env[13]     cC (RGB in xyz; w unused)
+#   env[14..15] unused
+#
+# Supply env[4..13] with glProgramEnvParameter4fvARB. The cA/cB/cC values
+# are the precomputed SH constants from PhantomMask's ComputeAndSetSH...
+# function. Keep the environment colour in the same coordinate frame as the
+# transformed normal. As in the OGLES2 sample, this code does not normalize
+# the transformed normal; provide the same model normal matrix/transform.
+#
+# The original fragment shader multiplies LightColour by a sampled texture.
+# In the IMG VGP path, use the fixed-function texture stage with GL_MODULATE.
+
+ATTRIB iPos      = vertex.position;
+ATTRIB iNormal   = vertex.normal;
+ATTRIB iTexCoord = vertex.texcoord[0];
+
+PARAM mvp[4] = { state.matrix.mvp };
+PARAM model[3] = { program.env[4..6] };
+PARAM cAr = program.env[7];
+PARAM cAg = program.env[8];
+PARAM cAb = program.env[9];
+PARAM cBr = program.env[10];
+PARAM cBg = program.env[11];
+PARAM cBb = program.env[12];
+PARAM cC  = program.env[13];
+
+TEMP n, basis, shA, shB, light, scratch;
+
+# Transform position.
+DP4 result.position.x, mvp[0], iPos;
+DP4 result.position.y, mvp[1], iPos;
+DP4 result.position.z, mvp[2], iPos;
+DP4 result.position.w, mvp[3], iPos;
+
+# Transform the normal into the SH lighting frame; homogeneous w=1 is used
+# by the first (linear + constant) set of SH coefficients.
+DP3 n.x, model[0], iNormal;
+DP3 n.y, model[1], iNormal;
+DP3 n.z, model[2], iNormal;
+MOV n.w, 1.0;
+
+# First four basis terms, independently for R, G and B.
+DP4 shA.x, cAr, n;
+DP4 shA.y, cAg, n;
+DP4 shA.z, cAb, n;
+
+# Next four terms: {x*y, y*z, z*z, x*z}.
+MUL basis.x, n.x, n.y;
+MUL basis.y, n.y, n.z;
+MUL basis.z, n.z, n.z;
+MUL basis.w, n.x, n.z;
+DP4 shB.x, cBr, basis;
+DP4 shB.y, cBg, basis;
+DP4 shB.z, cBb, basis;
+
+# Ninth term: x*x - y*y. Add all nine SH contributions.
+ADD light.xyz, shA, shB;
+MUL scratch.x, n.x, n.x;
+MUL scratch.y, n.y, n.y;
+SUB scratch.x, scratch.x, scratch.y;
+MAD result.color.xyz, cC, scratch.x, light;
+MOV result.color.w, 1.0;
+
+# Pass through UVs for the fixed-function texture stage.
+MOV result.texcoord[0], iTexCoord;
+END
