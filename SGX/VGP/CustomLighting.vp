@@ -1,0 +1,174 @@
+!!IMGvp1.0
+# Full IMG VGP custom diffuse-lighting shader (not VGP Lite).
+#
+# Combines nine-term SH diffuse irradiance, separately controlled sun and moon,
+# one point light, one spotlight, an optional fill term, and baked vertex RGB.
+# All lighting is evaluated per vertex and interpolated; textures are applied
+# later by the fixed-function OGLES texture stage with GL_MODULATE.
+# No glLight* state is read or required.
+#
+# Inputs:
+#   vertex.position      object-space position, w=1
+#   vertex.normal        object-space normal
+#   vertex.color.rgb     baked static illumination contribution; enable/fill
+#                        the color array, or set current colour to black when
+#                        no baked term is used
+#   vertex.texcoord[0]   material UV
+#
+# SH environment parameters (eye-space lighting frame):
+#   env[7]  cAr       env[8] cAg       env[9] cAb
+#   env[10] cBr       env[11] cBg      env[12] cBb
+#   env[13] cC (xyz used)
+#   env[4..6] and env[14..15] unused by this shader.
+# The cA/cB/cC values are precomputed SH irradiance coefficients, packed as in
+# PhantomMask_SH.vp. Rotate/update the coefficients into eye space when the
+# camera orientation changes so they match the transformed normal.
+#
+# Local parameters, uploaded via glProgramLocalParameter4fvARB:
+#   local[0] sun direction toward source, normalized eye-space xyz
+#   local[1] sun RGB and intensity in w (set w=0 when inactive)
+#   local[2] moon direction toward source, normalized eye-space xyz
+#   local[3] moon RGB and intensity in w (set w=0 when inactive)
+#   local[4] point position eye.xyz, inverse radius squared in w
+#   local[5] point RGB and intensity in w (set w=0 when inactive)
+#   local[6] spot position eye.xyz, inverse range squared in w
+#   local[7] normalized spot direction in eye space, pointing down the beam
+#   local[8] spot RGB and intensity in w
+#   local[9] coneScale, coneBias, unused, unused
+#            coneScale = 1/(innerCos - outerCos)
+#            coneBias  = -outerCos/(innerCos - outerCos)
+#   local[10] additive diffuse fill RGB (w unused)
+# local[11..15] unused.
+#
+# Point and spot lights use inverse-square distance with a smooth squared
+# radius/range cutoff. This is intentionally a diffuse shader: specular/DOT3
+# normal-map detail belongs in an additional fixed-function pass.
+
+ATTRIB iPos      = vertex.position;
+ATTRIB iNormal   = vertex.normal;
+ATTRIB iBaked    = vertex.color;
+ATTRIB iTexCoord = vertex.texcoord[0];
+
+PARAM mvp[4] = { state.matrix.mvp };
+PARAM mv[4]  = { state.matrix.modelview };
+PARAM cAr = program.env[7];
+PARAM cAg = program.env[8];
+PARAM cAb = program.env[9];
+PARAM cBr = program.env[10];
+PARAM cBg = program.env[11];
+PARAM cBb = program.env[12];
+PARAM cC  = program.env[13];
+
+PARAM sunDir    = program.local[0];
+PARAM sunColour = program.local[1];
+PARAM moonDir    = program.local[2];
+PARAM moonColour = program.local[3];
+PARAM pointPos    = program.local[4];
+PARAM pointColour = program.local[5];
+PARAM spotPos    = program.local[6];
+PARAM spotDir    = program.local[7];
+PARAM spotColour = program.local[8];
+PARAM cone       = program.local[9];
+PARAM fill       = program.local[10];
+
+TEMP eyePos, n, len, basis, shA, shB, lit, delta, ldir, distSq, invDist, atten, scratch;
+
+# Project the vertex and compute its eye-space position.
+DP4 result.position.x, mvp[0], iPos;
+DP4 result.position.y, mvp[1], iPos;
+DP4 result.position.z, mvp[2], iPos;
+DP4 result.position.w, mvp[3], iPos;
+DP4 eyePos.x, mv[0], iPos;
+DP4 eyePos.y, mv[1], iPos;
+DP4 eyePos.z, mv[2], iPos;
+DP4 eyePos.w, mv[3], iPos;
+
+# Transform and normalize the normal into eye space.
+DP3 n.x, mv[0], iNormal;
+DP3 n.y, mv[1], iNormal;
+DP3 n.z, mv[2], iNormal;
+DP3 len.x, n, n;
+MAX len.x, len.x, 0.0001;
+RSQ len.x, len.x;
+MUL n.xyz, n, len.x;
+MOV n.w, 1.0;
+
+# Nine-term second-order SH diffuse irradiance.
+DP4 shA.x, cAr, n;
+DP4 shA.y, cAg, n;
+DP4 shA.z, cAb, n;
+MUL basis.x, n.x, n.y;
+MUL basis.y, n.y, n.z;
+MUL basis.z, n.z, n.z;
+MUL basis.w, n.x, n.z;
+DP4 shB.x, cBr, basis;
+DP4 shB.y, cBg, basis;
+DP4 shB.z, cBb, basis;
+ADD lit.xyz, shA, shB;
+MUL scratch.x, n.x, n.x;
+MUL scratch.y, n.y, n.y;
+SUB scratch.x, scratch.x, scratch.y;
+MAD lit.xyz, cC, scratch.x, lit;
+
+# Directional sun. Direction points from the surface toward the light.
+DP3 scratch.x, n, sunDir;
+MAX scratch.x, scratch.x, 0.0;
+MUL scratch.x, scratch.x, sunColour.w;
+MAD lit.xyz, sunColour, scratch.x, lit;
+
+# Directional moon, independently faded by the host across the cycle.
+DP3 scratch.x, n, moonDir;
+MAX scratch.x, scratch.x, 0.0;
+MUL scratch.x, scratch.x, moonColour.w;
+MAD lit.xyz, moonColour, scratch.x, lit;
+
+# Local point light with inverse-square attenuation and smooth radius cutoff.
+SUB delta.xyz, pointPos, eyePos;
+DP3 distSq.x, delta, delta;
+MAX distSq.x, distSq.x, 0.0001;
+RSQ invDist.x, distSq.x;
+MUL ldir.xyz, delta, invDist.x;
+DP3 scratch.x, n, ldir;
+MAX scratch.x, scratch.x, 0.0;
+MUL scratch.y, distSq.x, pointPos.w;
+SUB scratch.y, 1.0, scratch.y;
+MAX scratch.y, scratch.y, 0.0;
+MUL scratch.y, scratch.y, scratch.y;
+MUL atten.x, invDist.x, invDist.x;
+MUL atten.x, atten.x, scratch.y;
+MUL atten.x, atten.x, scratch.x;
+MUL atten.x, atten.x, pointColour.w;
+MAD lit.xyz, pointColour, atten.x, lit;
+
+# Spotlight: point attenuation multiplied by a smooth cone factor.
+SUB delta.xyz, spotPos, eyePos;
+DP3 distSq.x, delta, delta;
+MAX distSq.x, distSq.x, 0.0001;
+RSQ invDist.x, distSq.x;
+MUL ldir.xyz, delta, invDist.x;
+DP3 scratch.x, n, ldir;
+MAX scratch.x, scratch.x, 0.0;
+DP3 scratch.y, -ldir, spotDir;
+MAD scratch.y, scratch.y, cone.x, cone.y;
+MAX scratch.y, scratch.y, 0.0;
+MIN scratch.y, scratch.y, 1.0;
+MUL scratch.z, distSq.x, spotPos.w;
+SUB scratch.z, 1.0, scratch.z;
+MAX scratch.z, scratch.z, 0.0;
+MUL scratch.z, scratch.z, scratch.z;
+MUL atten.x, invDist.x, invDist.x;
+MUL atten.x, atten.x, scratch.z;
+MUL atten.x, atten.x, scratch.y;
+MUL atten.x, atten.x, scratch.x;
+MUL atten.x, atten.x, spotColour.w;
+MAD lit.xyz, spotColour, atten.x, lit;
+
+# Add baked static illumination and optional dynamic fill, then clamp.
+ADD lit.xyz, lit, iBaked;
+ADD lit.xyz, lit, fill;
+MAX lit.xyz, lit, 0.0;
+MIN lit.xyz, lit, 1.0;
+MOV result.color.xyz, lit;
+MOV result.color.w, 1.0;
+MOV result.texcoord[0], iTexCoord;
+END

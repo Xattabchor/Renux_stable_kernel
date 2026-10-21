@@ -57,6 +57,33 @@ VGPCompiler -iMBXWater.vp -oMBXWater -target=generic
 VGPCompiler -iMBXWaterShadow.vp -oMBXWaterShadow -target=generic
 ```
 
+## Full-VGP custom lighting: SH + sun/moon + local lights
+
+`CustomLighting.vp` combines nine-term SH diffuse irradiance, separately
+controlled directional sun and moon, one point light, one spotlight, optional
+fill, and baked vertex RGB. Every contribution is computed in the VGP; the
+shader does not read or require any `glLight*` state. Texture colour is applied
+later by the fixed-function texture stage with `GL_MODULATE`.
+
+This version targets the full VGP (`-target=generic`), not VGP Lite. It uses
+`env[7..13]` for precomputed SH irradiance coefficients and `local[0..10]` for
+the direct sources and fill. Directions, positions, normals, and SH coefficients
+must share eye space; upload the sun/moon directions and point/spot positions in
+eye space, and rotate SH coefficients into eye space when the camera rotates.
+Set a source's intensity (`w`) to zero to disable it. The shader expects
+`vertex.color.rgb` to contain baked illumination; if no baked term is used, set
+the current vertex colour to black.
+
+```sh
+VGPCompiler -iSGX/VGP/CustomLighting.vp -oSGX/VGP/build/CustomLighting -target=generic
+```
+
+The output is diffuse vertex lighting, so it is interpolated across triangles.
+It does not calculate specular highlights or pixel-level normal-map lighting;
+use MBX DOT3 as an additional fixed-function pass if needed. More point/spot
+sources require duplicating their instruction blocks and remain subject to the
+full-VGP instruction and parameter limits.
+
 ## Vertex-generated glass refraction
 
 `GlassRefraction.vp` produces a screen-space UV from clip coordinates and bends
