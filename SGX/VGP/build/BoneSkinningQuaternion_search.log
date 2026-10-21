@@ -1,10 +1,2 @@
 === 1 bones: FAIL ===
 
-
-*************** Compiler Log ***************
-
-Error: Too many instructions, ARBVP_MAX_INSTRUCTIONS = 256
-Failed to compile.
-
-************* End Compiler Log *************
-
