@@ -1,6 +1,6 @@
 !!IMGvp1.0
 # Full VGP linear-blend skinning probe; bone rows are object-space 3x4 affine matrices.
-# Upload the first 15 rows to local parameters and the remaining 0 to environment parameters.
+# Upload the first 16 rows to local parameters and the remaining 14 to environment parameters.
 # vertex.attrib[1] = four integer-valued bone indices; attrib[2] = four weights.
 # Output color visualizes the normalized skinned normal for validation.
 ATTRIB iPos = vertex.position;
@@ -9,7 +9,7 @@ ATTRIB iBones = vertex.attrib[1];
 ATTRIB iWeights = vertex.attrib[2];
 ATTRIB iUV = vertex.texcoord[0];
 PARAM mvp[4] = { state.matrix.mvp };
-PARAM boneRows[15] = { program.local[0..14] };
+PARAM boneRows[30] = { program.local[0..15], program.env[0..13] };
 TEMP pAcc, nAcc, pTmp, nTmp;
 ADDRESS A0;
 MOV pAcc, 0.0;
