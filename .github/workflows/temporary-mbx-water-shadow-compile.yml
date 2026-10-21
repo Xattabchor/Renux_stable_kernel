@@ -1,0 +1,50 @@
+name: Temporary MBX water shadow VGP compile
+
+on:
+  push:
+    branches:
+      - arena/0db9be99-renux-stable-kernel
+    paths:
+      - .github/workflows/temporary-mbx-water-shadow-compile.yml
+      - SGX/VGP/MBXWaterShadow.vp
+      - SGX/VGP/MBXWaterShadowBlur.h
+      - SGX/VGP/MBXWater.md
+      - SGX/VGP/README.md
+
+permissions:
+  contents: write
+
+jobs:
+  compile:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install 32-bit runtime
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y libc6-i386 lib32gcc-s1 lib32stdc++6
+
+      - name: Compile full VGP shadow pass
+        shell: bash
+        run: |
+          set -euo pipefail
+          compiler='SGX/SDK_BIN/Graphics_SDK_setuplinux_4_03_00_02/GFX_Linux_SDK/OGLES/SDKPackage/Utilities/VGPCompiler/Linux/VGPCompiler'
+          mkdir -p SGX/VGP/build
+          "$compiler" -iSGX/VGP/MBXWaterShadow.vp -oSGX/VGP/build/MBXWaterShadow -target=generic > SGX/VGP/build/MBXWaterShadow_generic.log 2>&1
+          cat SGX/VGP/build/MBXWaterShadow_generic.log
+          test -s SGX/VGP/build/MBXWaterShadow.bin
+          test -s SGX/VGP/build/MBXWaterShadow.h
+          ls -lh SGX/VGP/build/MBXWaterShadow.bin SGX/VGP/build/MBXWaterShadow.h
+
+      - name: Publish compile output temporarily
+        if: always()
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f SGX/VGP/build/
+          git commit -m 'Temporary MBX water shadow compile output' || true
+          git push origin "HEAD:${GITHUB_REF_NAME}"

@@ -143,6 +143,34 @@ glTexCoordPointer(4, GL_FLOAT, sizeof(MBXWaterVertexWaveData),
 
 Restore client texture-array and active texture state after drawing the water.
 
+## Soft projected shadows on the water
+
+`MBXWaterShadow.vp` is an optional second water pass for a soft shadow mask.
+The host should project opaque caster triangles onto the mean water plane from
+the light's position/direction, rasterize the projected polygons as white with
+alpha 1 into a low-resolution RGBA texture, and blur the alpha channel before
+uploading it. For point lights, project each caster vertex along the ray from
+the light through that vertex to the water plane; for directional lights,
+project along the light-ray direction. This gives the correct hard-shadow
+footprint for the planar receiver. Blur radius can be chosen from the light's
+angular size and caster-to-water distance for a plausible penumbra.
+
+`MBXWaterShadowBlur.h` provides a separable 5-tap Gaussian alpha blur for an
+RGBA8 mask. Repeated blur or a smaller mask gives a wider, cheaper penumbra.
+Clear the mask to alpha zero; draw the projected opaque triangles with alpha
+one so their union remains opaque before filtering. Rebuild the mask when a
+caster or light moves, not every frame if both are static.
+
+For the overlay pass, upload `env[0..3]` as the water-object-to-mask projective
+matrix and `env[4].x` as shadow strength. Bind the white-RGB/soft-alpha mask on
+texture unit 0 with `GL_MODULATE`; enable blending with
+`GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA`. Draw the same wave-updated grid after
+the water composite, use `GL_LEQUAL`, and disable depth writes for this pass.
+The displaced surface position warps the mask over the waves. This is a
+projected planar shadow, not a shadow-map comparison; MBX has no programmable
+PCF stage, so the soft penumbra is filtered/approximated rather than physically
+integrated over an area light.
+
 ## What this achieves—and what it does not
 
 - The reflected and refracted scenes are real render-to-texture captures.

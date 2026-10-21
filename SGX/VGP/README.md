@@ -39,6 +39,23 @@ IMG VGP path, pass the UV through `result.texcoord[0]` and configure the GLES
 fixed-function texture environment for `GL_MODULATE` to get the equivalent
 texture-times-light-colour operation.
 
+## MBX VGP planar water and soft shadow overlay
+
+`MBXWater.vp` combines projective reflection/refraction coordinates, vertex
+Fresnel blending, and CPU-generated wave displacement/normals. The host-side
+wave helper is `MBXWaterWaves.h`; see `MBXWater.md` for the render-to-texture
+sequence and MBX two-layer combiner setup. `MBXWaterShadow.vp` projects a
+filtered planar shadow mask onto the animated surface, and
+`MBXWaterShadowBlur.h` provides a small CPU alpha blur. These shadows have a
+soft filtered penumbra, not programmable PCF.
+
+Build the water shaders for full VGP as follows:
+
+```sh
+VGPCompiler -iMBXWater.vp -oMBXWater -target=generic
+VGPCompiler -iMBXWaterShadow.vp -oMBXWaterShadow -target=generic
+```
+
 ## Vertex-generated glass refraction
 
 `GlassRefraction.vp` produces a screen-space UV from clip coordinates and bends

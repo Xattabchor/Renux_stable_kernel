@@ -1,0 +1,55 @@
+!!IMGvp1.0
+# Project a pre-filtered planar shadow mask onto the displaced water mesh.
+#
+# The host creates the mask by projecting opaque caster geometry onto the
+# mean water plane, then blurring its alpha channel. This program does not do a
+# shadow-map depth comparison; MBX's fixed-function pixel stage has no PCF
+# sampler. It projects the animated water surface into the mask and outputs a
+# black overlay whose alpha is the mask opacity times env[4].x.
+#
+# Inputs:
+#   vertex.position       undisturbed object-space water-grid position
+#   vertex.texcoord[1].w  animated vertical wave offset (from MBXWaterWaves.h)
+#
+# Environment parameters:
+#   env[0..3]  object -> planar shadow-mask texture projection matrix rows
+#   env[4].x   overall shadow strength, 0..1
+#
+# Bind the RGBA mask on texture unit 0. It should have white RGB and the blurred
+# shadow opacity in alpha. Use GL_MODULATE and blend with
+# GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA. Draw after the base water pass with
+# GL_LEQUAL and depth writes disabled. The water mask is a planar approximation;
+# the VGP's displaced position warps it over waves.
+
+ATTRIB iPos  = vertex.position;
+ATTRIB iWave = vertex.texcoord[1];
+
+PARAM mvp[4] = { state.matrix.mvp };
+PARAM shadow0 = program.env[0];
+PARAM shadow1 = program.env[1];
+PARAM shadow2 = program.env[2];
+PARAM shadow3 = program.env[3];
+PARAM shadow = program.env[4];
+
+TEMP pos, clip, tc;
+
+MOV pos, iPos;
+ADD pos.y, iPos.y, iWave.w;
+
+DP4 clip.x, mvp[0], pos;
+DP4 clip.y, mvp[1], pos;
+DP4 clip.z, mvp[2], pos;
+DP4 clip.w, mvp[3], pos;
+MOV result.position, clip;
+
+DP4 tc.x, shadow0, pos;
+DP4 tc.y, shadow1, pos;
+DP4 tc.z, shadow2, pos;
+DP4 tc.w, shadow3, pos;
+MOV result.texcoord[0], tc;
+
+MOV result.color.x, 0.0;
+MOV result.color.y, 0.0;
+MOV result.color.z, 0.0;
+MOV result.color.w, shadow.x;
+END
