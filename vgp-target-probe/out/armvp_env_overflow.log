@@ -1,0 +1,12 @@
+probe=armvp_env_overflow
+exit=0
+command=/home/runner/work/Renux_stable_kernel/Renux_stable_kernel/SGX/SDK_BIN/Graphics_SDK_setuplinux_4_03_00_02/GFX_Linux_SDK/OGLES/SDKPackage/Utilities/VGPCompiler/Linux/VGPCompiler -i/tmp/vgp-probe-yvt79801/armvp_env_overflow.vp -ovgp-target-probe/out/armvp_env_overflow -target=armvp
+*************** Compiler Log ***************
+
+Error: Array size out of range
+Line 1:
+PARAM p[256] = { program.env[0..255] };
+        ^
+Failed to compile.
+
+************* End Compiler Log *************
