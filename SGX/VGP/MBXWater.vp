@@ -1,0 +1,121 @@
+!!IMGvp1.0
+# Two-projective-texture water surface for MBX + IMG VGP.
+#
+# The host renders planar reflection and refraction into separate 2D textures.
+# VGP projects the displaced surface into both images, adds a vertex-level
+# normal distortion, and emits a Schlick Fresnel weight in result.color.
+# The fixed-function two-layer texture combiner mixes refraction and reflection.
+#
+# This is not per-pixel refraction: the water wave height and normal are
+# evaluated per vertex by MBXWaterWaves.h (or equivalent host code), and the
+# resulting data is interpolated across each triangle.
+#
+# Inputs:
+#   vertex.position       undisturbed object-space grid position (w=1)
+#   vertex.texcoord[1]    animated wave data: normal.xyz, height offset.w
+#
+# Environment parameters, uploaded with glProgramEnvParameter4fvARB:
+#   env[0..3]   object -> refraction texture projection, four DP4 rows
+#   env[4..7]   object -> reflection texture projection, four DP4 rows
+#               Both matrices must include the 0.5 scale/bias from clip space
+#               to texture coordinates. Q is preserved for projective sampling.
+#   env[8]      refraction distortion scale.xy, reflection distortion scale.zw
+#               Values are in normalized texture-coordinate units per unit
+#               eye-space normal component. Signs depend on camera convention.
+#   env[9].x    Schlick F0 (typical water: 0.02..0.04)
+#
+# Output texture coordinates:
+#   result.texcoord[0]  refraction texture, projective
+#   result.texcoord[1]  reflection texture, projective
+#   result.color.rgb    grayscale Fresnel reflection weight (0=refraction,
+#                       1=reflection); alpha is 1.
+#
+# Assumptions: camera is above the water; the supplied wave normals point up;
+# model transform is rigid or uniformly scaled. Use a dense grid for smooth
+# silhouettes and low-frequency vertex distortion.
+
+ATTRIB iPos  = vertex.position;
+ATTRIB iWave = vertex.texcoord[1];
+
+PARAM mvp[4] = { state.matrix.mvp };
+PARAM mv[4]  = { state.matrix.modelview };
+
+PARAM refract0 = program.env[0];
+PARAM refract1 = program.env[1];
+PARAM refract2 = program.env[2];
+PARAM refract3 = program.env[3];
+PARAM reflect0 = program.env[4];
+PARAM reflect1 = program.env[5];
+PARAM reflect2 = program.env[6];
+PARAM reflect3 = program.env[7];
+PARAM distortion = program.env[8];
+PARAM water = program.env[9];
+
+TEMP pos, clip, eyePos, n, len, viewDir, fresnel, tcR, tcM, tmp;
+
+# Apply the CPU-evaluated vertical wave displacement before projection.
+MOV pos, iPos;
+ADD pos.y, iPos.y, iWave.w;
+
+DP4 clip.x, mvp[0], pos;
+DP4 clip.y, mvp[1], pos;
+DP4 clip.z, mvp[2], pos;
+DP4 clip.w, mvp[3], pos;
+MOV result.position, clip;
+
+# Eye-space position and animated normal.
+DP4 eyePos.x, mv[0], pos;
+DP4 eyePos.y, mv[1], pos;
+DP4 eyePos.z, mv[2], pos;
+DP4 eyePos.w, mv[3], pos;
+DP3 n.x, mv[0], iWave;
+DP3 n.y, mv[1], iWave;
+DP3 n.z, mv[2], iWave;
+DP3 len.x, n, n;
+MAX len.x, len.x, 0.0001;
+RSQ len.x, len.x;
+MUL n.xyz, n, len.x;
+
+# View direction (camera at eye-space origin).
+MOV viewDir.xyz, -eyePos;
+DP3 len.x, viewDir, viewDir;
+MAX len.x, len.x, 0.0001;
+RSQ len.x, len.x;
+MUL viewDir.xyz, viewDir, len.x;
+
+# Schlick Fresnel: F = F0 + (1-F0)*(1-dot(N,V))^5.
+DP3 fresnel.x, n, viewDir;
+MAX fresnel.x, fresnel.x, 0.0;
+MIN fresnel.x, fresnel.x, 1.0;
+SUB fresnel.y, 1.0, fresnel.x;
+MUL fresnel.z, fresnel.y, fresnel.y;
+MUL fresnel.z, fresnel.z, fresnel.y;
+MUL fresnel.z, fresnel.z, fresnel.y;
+MUL fresnel.z, fresnel.z, fresnel.y;
+SUB tmp.x, 1.0, water.x;
+MAD fresnel.x, fresnel.z, tmp.x, water.x;
+MOV result.color.xyz, fresnel.x;
+MOV result.color.w, 1.0;
+
+# Project into the refraction render target, then warp UVs by the wave normal.
+DP4 tcR.x, refract0, pos;
+DP4 tcR.y, refract1, pos;
+DP4 tcR.z, refract2, pos;
+DP4 tcR.w, refract3, pos;
+MUL tmp.x, n.x, distortion.x;
+MAD tcR.x, tmp.x, tcR.w, tcR.x;
+MUL tmp.x, n.z, distortion.y;
+MAD tcR.y, tmp.x, tcR.w, tcR.y;
+MOV result.texcoord[0], tcR;
+
+# Project into the reflection render target with an independently tunable warp.
+DP4 tcM.x, reflect0, pos;
+DP4 tcM.y, reflect1, pos;
+DP4 tcM.z, reflect2, pos;
+DP4 tcM.w, reflect3, pos;
+MUL tmp.x, n.x, distortion.z;
+MAD tcM.x, tmp.x, tcM.w, tcM.x;
+MUL tmp.x, n.z, distortion.w;
+MAD tcM.y, tmp.x, tcM.w, tcM.y;
+MOV result.texcoord[1], tcM;
+END
