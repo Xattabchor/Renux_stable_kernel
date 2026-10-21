@@ -1,0 +1,67 @@
+!!IMGvp1.0
+# Quantum software-renderer draw mode 7, approximated on IMG full VGP.
+#
+# Quantum mode 7 samples a distortion texture per pixel, interprets red/green
+# around byte value 128 as a screen-pixel offset, then copies a scene snapshot
+# at that shifted screen coordinate. VGP cannot sample a texture and use its
+# result to change another texture coordinate in the same vertex program.
+# Therefore the host must sample the distortion map at each mesh vertex and
+# upload those normalized red/green values through vertex.color.rg.
+#
+# Inputs:
+#   vertex.position  object-space position, w=1
+#   vertex.color.rg  pre-sampled Quantum distortion map (R/255, G/255)
+#                    neutral offset is 128/255 in each channel
+#
+# State matrix:
+#   mvp[0..3]        state.matrix.mvp
+#
+# Upload env[8] with screen-UV offset scales for the active viewport:
+#   scale = 64 * (viewportWidth + viewportHeight) / (240 + 320)
+#   env[8].x = 255 * scale / (256 * viewportWidth)
+#   env[8].y = 255 * scale / (256 * viewportHeight)
+# These scales reproduce Quantum's approximate pixel displacement
+# (channel - 128) * scale / 256. Negate env[8].y or flip the texture matrix
+# if the copied framebuffer texture uses the opposite vertical orientation.
+#
+# Bind a copy of the opaque scene as the texture, use GL_MODULATE with white
+# primary colour, and render this surface after the opaque scene. Disable
+# blending for Quantum-like replacement sampling. The result is vertex
+# interpolated; finer glass geometry tracks the original per-pixel distortion
+# texture more closely. This is not exact without fragment-level texture lookup.
+
+ATTRIB iPos   = vertex.position;
+ATTRIB iColor = vertex.color;
+
+PARAM mvp[4] = { state.matrix.mvp };
+PARAM scale  = program.env[8];
+
+TEMP clip, delta, tc;
+
+DP4 clip.x, mvp[0], iPos;
+DP4 clip.y, mvp[1], iPos;
+DP4 clip.z, mvp[2], iPos;
+DP4 clip.w, mvp[3], iPos;
+MOV result.position, clip;
+
+# Convert normalized vertex colors to signed offsets centered on Quantum's 128.
+SUB delta.x, iColor.x, 0.5019608;
+SUB delta.y, iColor.y, 0.5019608;
+
+# Projective screen coordinates: ((clip.xy / clip.w) + 1) / 2.
+MUL tc.x, clip.x, 0.5;
+MAD tc.x, clip.w, 0.5, tc.x;
+MUL tc.y, clip.y, 0.5;
+MAD tc.y, clip.w, 0.5, tc.y;
+
+# Add viewport-scaled offsets before projective division.
+MUL delta.x, delta.x, scale.x;
+MAD tc.x, delta.x, clip.w, tc.x;
+MUL delta.y, delta.y, scale.y;
+MAD tc.y, delta.y, clip.w, tc.y;
+MOV tc.z, 0.0;
+MOV tc.w, clip.w;
+MOV result.texcoord[0], tc;
+
+MOV result.color, 1.0;
+END

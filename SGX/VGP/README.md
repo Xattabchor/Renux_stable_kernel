@@ -106,6 +106,32 @@ looks smoother. It is an approximation, not per-pixel Snell refraction, and it
 assumes a rigid/uniform model transform for the normal matrix. It does not
 model thickness, internal reflections or dispersion.
 
+### Quantum draw mode 7 screen distortion
+
+`QuantumMode7Glass.vp` reproduces mode 7's screen-copy warp more closely than
+`GlassRefraction.vp`: Quantum's mode 7 uses the sampled texture's red/green
+channels as a per-pixel screen-space offset, centered at 128. The VGP has no
+fragment texture lookup, so the host must sample that distortion map at each
+mesh vertex and place normalized R/G values in `vertex.color.rg`. The shader
+then creates projective framebuffer coordinates and applies the same
+resolution-scaled offset. A dense glass mesh reduces the per-vertex
+approximation error.
+
+Bind the opaque scene copy as the only texture, use `GL_MODULATE` with white
+primary colour, and draw the glass after the opaque scene with blending disabled
+for Quantum-like replacement sampling. Upload `env[8]` using the formula in
+the shader header; flip the Y scale or texture matrix if the framebuffer copy
+has the opposite vertical orientation. The asset/render host must supply the
+per-vertex distortion colours; the VGP cannot read Quantum's distortion texture
+itself.
+
+```sh
+VGPCompiler -iSGX/VGP/QuantumMode7Glass.vp -oSGX/VGP/build/QuantumMode7Glass -target=generic
+```
+
+This matches mode 7's basic distortion-map effect, not the software rasterizer's
+exact per-pixel result. It does not model refraction thickness or material tint.
+
 ## Dynamic shot flash and flashlight lighting
 
 `DynamicShotFlashLighting.vp` evaluates one transient point light (for a muzzle
@@ -125,13 +151,77 @@ resource limits. Compile for full VGP with the SDK compiler, for example:
 VGPCompiler -iDynamicShotFlashLighting.vp -oDynamicShotFlashLighting -target=generic
 ```
 
+### Quantum-style mode 13: RGB baked lighting, AO/GI and runtime lights
+
+Quantum modes 9 and 13 store baked illumination per polygon vertex and
+interpolate it while rasterizing the textured triangle. Mode 9 is monochrome;
+mode 13 keeps separate red, green and blue illumination. `LightMapper` bakes
+static sky/sun, local lights, AO and optional GI. The runtime shot flash and
+flashlight are then added to the vertex illumination before it modulates the
+material texture.
+
+`DynamicBakedShotFlashLighting.vp` follows that mode-13 data path: `vertex.color.rgb`
+is the precomputed RGB illumination, while a transient point flash and a
+spotlight are evaluated at each vertex at runtime. AO and GI belong in the
+baked vertex RGB, not in the material albedo. GLES interpolates the vertex
+colour perspective-correctly across each triangle; the texture stage should use
+`GL_MODULATE`. For a monochrome mode-9 bake, pass `--monochrome`; the baker
+writes the same luminance into all three baked channels. Use white dynamic
+light colours if the runtime contribution should also remain grayscale.
+
+The standalone offline helper `bake_vertex_lighting.py` can bake OBJ meshes
+without external Python packages. It writes the common OBJ vertex-colour
+extension (`v x y z r g b`) and supports hemispheric sky/ground, shadowed
+sunlight, repeatable static point lights, cosine-sampled AO, and configurable
+multi-bounce diffuse GI. At every diffuse hit it uses the material's `Kd`
+reflectance; `Ke` contributes emissive light. Both come from referenced MTL
+files, with `--default-albedo` as the missing-`Kd` fallback. Example:
+
+```sh
+python3 SGX/VGP/bake_vertex_lighting.py scene.obj scene_baked.obj \
+  --sky 0.28 0.34 0.45 --ground 0.045 0.035 0.025 \
+  --sun-dir 0.35 0.8 0.25 --sun-color 0.8 0.72 0.58 \
+  --point-light 1 2 0 1.0 0.35 0.12 2.0 5.0 \
+  --ao-samples 32 --ao-distance 2.0 --ao-strength 0.75 \
+  --gi-samples 32 --gi-bounces 8 --gi-strength 0.65 --rr-depth 3
+```
+
+The color values are linear and clamped to 0..1. Increase AO/GI sample counts
+for smoother, less noisy bakes; set `--gi-samples 0` to disable GI and raise
+`--gi-bounces` for deeper indirect lighting. Russian roulette (`--rr-depth`)
+keeps long paths practical. The CPU cost and Monte Carlo noise grow with both
+sample count and bounce depth. MTL `Kd`/`Ke` values are supported, but texture
+maps such as `map_Kd` are not sampled; `--default-albedo` is used when no `Kd`
+is available. After baking, the asset importer must copy the OBJ vertex RGB
+into the GLES vertex-color array; this repository does not contain the game's
+mesh importer or bind that array for you. Adjust intensity/radius and bake
+settings to the scene's unit scale. The runtime VGP still requires the
+`env[8..14]` upload described above.
+
+### Import Quantum `.vla` light data
+
+A VGP shader cannot read Quantum's `.vla` byte stream directly. Quantum writes
+it as an unlabelled sequence of per-corner bytes; it contains no mesh IDs,
+face indices, topology, or mode marker. `convert_quantum_vla.py` is the bridge:
+it decodes mode 9 grayscale or mode 13 RGB and writes the values into OBJ
+vertex colors.
+
+```sh
+python3 SGX/VGP/convert_quantum_vla.py scene.obj lightmap.vla scene_vgp.obj --mode 13
+```
+
+The OBJ must have exactly the same lighted triangle/quad sequence and polygon
+corner order as the meshes used to generate the VLA. Faces skipped by Quantum's
+serializer must also be absent from the OBJ. The converter catches impossible
+lengths, but a different ordering with the same byte layout cannot be detected
+because VLA has no topology metadata. Once converted, import the OBJ vertex RGB into
+`vertex.color.rgb` and use `DynamicBakedShotFlashLighting.vp` for baked mode-13
+colors plus live shot/flashlight lighting. The shader itself does not parse
+`.vla`; the conversion must happen offline or in the host-side asset loader.
+
 ### Combine baked vertex illumination with dynamic lights
 
-`DynamicBakedShotFlashLighting.vp` is the companion variant. It reads baked
-static illumination from `vertex.color.rgb`, then adds the same live shot and
-flashlight contributions before modulating the material texture. Enable the
-GLES color array and fill its RGB channels with baked illumination (not the
-material albedo); alpha is ignored. The live shot/flashlight parameters remain
-in `env[8..14]` and are updated by the host. Thus dark baked areas can still be
-lit by a shot or flashlight, while the baked contribution remains when those
-lights are off.
+Use `DynamicBakedShotFlashLighting.vp` for the combined path documented above.
+Enable the GLES color array and upload baked illumination (not material albedo)
+in `vertex.color.rgb`; alpha is ignored. The shader and register layout are
+unchanged when switching between RGB mode 13 and grayscale mode 9.
