@@ -27,8 +27,36 @@ shader applies each bone's upper 3x3 directly to normals before renormalizing.
 The generated `build/BoneSkinningMax.bin` is the compiled program and
 `build/BoneSkinningMax.h` is the compiler's C array form.
 
-Reproduce the sequential compiler probe on Linux with the SDK's 32-bit runtime
+### 16-bone rigid palette with quaternion encoding
+
+For rigid bone transforms, `build/BoneSkinningQuaternionMax.vp` packs each
+rotation as a unit quaternion plus a translation vector: two `vec4` rows per
+bone instead of three. It reconstructs the quaternion rotation in the shader,
+then accumulates the four weighted influences. The SDK compiler accepted **16
+bones** (32 rows: 16 local plus 16 environment parameters) using five TEMP
+registers. The 17-bone candidate fails at environment parameter index 16, so
+16 is the tested maximum for this two-row encoding. Unlike the affine path,
+this representation cannot express per-bone scale or shear; prepare normalized
+quaternions and rigid transforms on the host.
+
+For bone `b`, upload quaternion `(x,y,z,w)` to conceptual row `2*b`, then
+translation `(x,y,z,unused)` to row `2*b+1`. Rows 0..15 go to
+`glProgramLocalParameter4fvARB`; rows 16..31 go to
+`glProgramEnvParameter4fvARB`. Vertex bone indices in `attrib[1]` must be
+integer-valued and in 0..15; weights in `attrib[2]` should sum to 1.0. The
+compiled binary, C header, exact shader, and pass/fail log are
+`build/BoneSkinningQuaternionMax.bin`, `.h`, `.vp`, and
+`build/BoneSkinningQuaternion_search.log` respectively. This remains a
+compiler-target result, not a test on a physical device.
+
+Reproduce the compressed-palette search on Linux with the SDK's 32-bit runtime
 installed (`libc6-i386`, `lib32gcc-s1`, and `lib32stdc++6`):
+
+```sh
+python3 SGX/VGP/generate_quaternion_bone_skinning.py --max-try 64
+```
+
+Reproduce the sequential affine-matrix compiler probe with:
 
 ```sh
 python3 SGX/VGP/generate_bone_skinning.py --max-try 64
