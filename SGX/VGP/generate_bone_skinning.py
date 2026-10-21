@@ -2,7 +2,8 @@
 """Generate and compile the largest VGP affine bone palette the SDK accepts.
 
 The shader uses dynamic addressing and four sequential influences, reusing a
-small TEMP set. A 3x4 affine matrix is uploaded as three program.local vec4s.
+small TEMP set. A 3x4 affine matrix is uploaded as three vec4 parameter rows,
+split across local and environment parameter banks when needed.
 """
 import argparse
 import os
@@ -19,10 +20,17 @@ DEFAULT_COMPILER = ROOT / "SGX/SDK_BIN/Graphics_SDK_setuplinux_4_03_00_02/GFX_Li
 
 def make_source(bones: int) -> str:
     rows = bones * 3
+    local_rows = min(rows, 17)
+    env_rows = rows - local_rows
+    param_ranges = []
+    if local_rows:
+        param_ranges.append("program.local[0..%d]" % (local_rows - 1))
+    if env_rows:
+        param_ranges.append("program.env[0..%d]" % (env_rows - 1))
     lines = [
         "!!IMGvp1.0",
         "# Full VGP linear-blend skinning probe; bone rows are object-space 3x4 affine matrices.",
-        "# Upload 3 vec4 rows per bone to program.local[0..%d]." % (rows - 1),
+        "# Upload the first %d rows to local parameters and the remaining %d to environment parameters." % (local_rows, env_rows),
         "# vertex.attrib[1] = four integer-valued bone indices; attrib[2] = four weights.",
         "# Output color visualizes the normalized skinned normal for validation.",
         "ATTRIB iPos = vertex.position;",
@@ -31,7 +39,7 @@ def make_source(bones: int) -> str:
         "ATTRIB iWeights = vertex.attrib[2];",
         "ATTRIB iUV = vertex.texcoord[0];",
         "PARAM mvp[4] = { state.matrix.mvp };",
-        "PARAM boneRows[%d] = { program.local[0..%d] };" % (rows, rows - 1),
+        "PARAM boneRows[%d] = { %s };" % (rows, ", ".join(param_ranges)),
         "TEMP pAcc, nAcc, pTmp, nTmp;",
         "ADDRESS A0;",
         "MOV pAcc, 0.0;",
@@ -129,8 +137,11 @@ def main() -> int:
         shutil.copyfile(last_base.with_suffix(".bin"), out_dir / "BoneSkinningMax.bin")
         shutil.copyfile(last_base.with_suffix(".h"), out_dir / "BoneSkinningMax.h")
 
-    summary = "Maximum contiguous palette compiled: %d bones (3 vec4 rows per bone, %d program.local registers)." % (
-        last_success, last_success * 3
+    rows = last_success * 3
+    local_rows = min(rows, 17)
+    env_rows = rows - local_rows
+    summary = "Maximum contiguous palette compiled: %d bones (3 vec4 rows per bone, %d parameter rows: %d local + %d environment)." % (
+        last_success, rows, local_rows, env_rows
     )
     (out_dir / "BoneSkinningMax.txt").write_text(
         summary + "\n" + failure_reason + "\nTEMP declaration: 4 vec4 registers.\n"
