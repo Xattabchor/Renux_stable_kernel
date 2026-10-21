@@ -1,4 +1,269 @@
-=== 1 bones: FAIL ===
+=== 1 bones: PASS ===
 
-[VGPCompiler exit code: -11]
+
+*************** Compiler Log ***************
+
+Flags: 00000030
+Starting section 0
+Ending section 0
+Starting section 1
+Ending section 1
+Compiling /tmp/vgp-quaternion-bones-8b_dx6r6/BoneSkinningQuaternion_01 ...
+
+Compiled OK.
+
+************* End Compiler Log *************
+
+=== 2 bones: PASS ===
+
+
+*************** Compiler Log ***************
+
+Flags: 00000030
+Starting section 0
+Ending section 0
+Starting section 1
+Ending section 1
+Compiling /tmp/vgp-quaternion-bones-8b_dx6r6/BoneSkinningQuaternion_02 ...
+
+Compiled OK.
+
+************* End Compiler Log *************
+
+=== 3 bones: PASS ===
+
+
+*************** Compiler Log ***************
+
+Flags: 00000030
+Starting section 0
+Ending section 0
+Starting section 1
+Ending section 1
+Compiling /tmp/vgp-quaternion-bones-8b_dx6r6/BoneSkinningQuaternion_03 ...
+
+Compiled OK.
+
+************* End Compiler Log *************
+
+=== 4 bones: PASS ===
+
+
+*************** Compiler Log ***************
+
+Flags: 00000030
+Starting section 0
+Ending section 0
+Starting section 1
+Ending section 1
+Compiling /tmp/vgp-quaternion-bones-8b_dx6r6/BoneSkinningQuaternion_04 ...
+
+Compiled OK.
+
+************* End Compiler Log *************
+
+=== 5 bones: PASS ===
+
+
+*************** Compiler Log ***************
+
+Flags: 00000030
+Starting section 0
+Ending section 0
+Starting section 1
+Ending section 1
+Compiling /tmp/vgp-quaternion-bones-8b_dx6r6/BoneSkinningQuaternion_05 ...
+
+Compiled OK.
+
+************* End Compiler Log *************
+
+=== 6 bones: PASS ===
+
+
+*************** Compiler Log ***************
+
+Flags: 00000030
+Starting section 0
+Ending section 0
+Starting section 1
+Ending section 1
+Compiling /tmp/vgp-quaternion-bones-8b_dx6r6/BoneSkinningQuaternion_06 ...
+
+Compiled OK.
+
+************* End Compiler Log *************
+
+=== 7 bones: PASS ===
+
+
+*************** Compiler Log ***************
+
+Flags: 00000030
+Starting section 0
+Ending section 0
+Starting section 1
+Ending section 1
+Compiling /tmp/vgp-quaternion-bones-8b_dx6r6/BoneSkinningQuaternion_07 ...
+
+Compiled OK.
+
+************* End Compiler Log *************
+
+=== 8 bones: PASS ===
+
+
+*************** Compiler Log ***************
+
+Flags: 00000030
+Starting section 0
+Ending section 0
+Starting section 1
+Ending section 1
+Compiling /tmp/vgp-quaternion-bones-8b_dx6r6/BoneSkinningQuaternion_08 ...
+
+Compiled OK.
+
+************* End Compiler Log *************
+
+=== 9 bones: PASS ===
+
+
+*************** Compiler Log ***************
+
+Flags: 00000030
+Starting section 0
+Ending section 0
+Starting section 1
+Ending section 1
+Compiling /tmp/vgp-quaternion-bones-8b_dx6r6/BoneSkinningQuaternion_09 ...
+
+Compiled OK.
+
+************* End Compiler Log *************
+
+=== 10 bones: PASS ===
+
+
+*************** Compiler Log ***************
+
+Flags: 00000030
+Starting section 0
+Ending section 0
+Starting section 1
+Ending section 1
+Compiling /tmp/vgp-quaternion-bones-8b_dx6r6/BoneSkinningQuaternion_10 ...
+
+Compiled OK.
+
+************* End Compiler Log *************
+
+=== 11 bones: PASS ===
+
+
+*************** Compiler Log ***************
+
+Flags: 00000030
+Starting section 0
+Ending section 0
+Starting section 1
+Ending section 1
+Compiling /tmp/vgp-quaternion-bones-8b_dx6r6/BoneSkinningQuaternion_11 ...
+
+Compiled OK.
+
+************* End Compiler Log *************
+
+=== 12 bones: PASS ===
+
+
+*************** Compiler Log ***************
+
+Flags: 00000030
+Starting section 0
+Ending section 0
+Starting section 1
+Ending section 1
+Compiling /tmp/vgp-quaternion-bones-8b_dx6r6/BoneSkinningQuaternion_12 ...
+
+Compiled OK.
+
+************* End Compiler Log *************
+
+=== 13 bones: PASS ===
+
+
+*************** Compiler Log ***************
+
+Flags: 00000030
+Starting section 0
+Ending section 0
+Starting section 1
+Ending section 1
+Compiling /tmp/vgp-quaternion-bones-8b_dx6r6/BoneSkinningQuaternion_13 ...
+
+Compiled OK.
+
+************* End Compiler Log *************
+
+=== 14 bones: PASS ===
+
+
+*************** Compiler Log ***************
+
+Flags: 00000030
+Starting section 0
+Ending section 0
+Starting section 1
+Ending section 1
+Compiling /tmp/vgp-quaternion-bones-8b_dx6r6/BoneSkinningQuaternion_14 ...
+
+Compiled OK.
+
+************* End Compiler Log *************
+
+=== 15 bones: PASS ===
+
+
+*************** Compiler Log ***************
+
+Flags: 00000030
+Starting section 0
+Ending section 0
+Starting section 1
+Ending section 1
+Compiling /tmp/vgp-quaternion-bones-8b_dx6r6/BoneSkinningQuaternion_15 ...
+
+Compiled OK.
+
+************* End Compiler Log *************
+
+=== 16 bones: PASS ===
+
+
+*************** Compiler Log ***************
+
+Flags: 00000030
+Starting section 0
+Ending section 0
+Starting section 1
+Ending section 1
+Compiling /tmp/vgp-quaternion-bones-8b_dx6r6/BoneSkinningQuaternion_16 ...
+
+Compiled OK.
+
+************* End Compiler Log *************
+
+=== 17 bones: FAIL ===
+
+
+*************** Compiler Log ***************
+
+Error: Array index for Env/Local Params is out of range (17), max is 16
+Line 11:
+PARAM boneRows[34] = { program.local[0..15], program.env[0..17] };
+                                                            ^
+Failed to compile.
+
+************* End Compiler Log *************
 
