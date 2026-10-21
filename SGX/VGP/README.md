@@ -61,8 +61,21 @@ looks smoother. It is an approximation, not per-pixel Snell refraction, and it
 assumes a rigid/uniform model transform for the normal matrix. It does not
 model thickness, internal reflections or dispersion.
 
-Compile either source for the full VGP target with the SDK compiler:
+## Dynamic shot flash and flashlight lighting
+
+`DynamicShotFlashLighting.vp` evaluates one transient point light (for a muzzle
+flash or hit event) and one spotlight (for a flashlight) at each vertex. It
+uses no `glLight*` calls and no baked vertex colours. The host updates `env[8]`
+through `env[14]` with `glProgramEnvParameter4fvARB` each frame; see the source
+header for the complete layout. For an inactive shot, set `env[9].w` to zero.
+Use the ordinary texture stage with `GL_MODULATE` to apply the dynamic vertex
+illumination to the material texture. The flashlight and shot positions, plus
+the flashlight direction, must be supplied in eye space.
+
+This computes per-vertex illumination, not a texture lightmap. A dense mesh
+improves smoothness; the number of sources is intentionally limited to fit VGP
+resource limits. Compile for full VGP with the SDK compiler, for example:
 
 ```sh
-VGPCompiler -iGlassRefraction.vp -oGlassRefraction -target=generic
+VGPCompiler -iDynamicShotFlashLighting.vp -oDynamicShotFlashLighting -target=generic
 ```

@@ -1,0 +1,55 @@
+name: Temporary dynamic-light VGP compile
+
+on:
+  push:
+    branches:
+      - arena/0db9be99-renux-stable-kernel
+    paths:
+      - .github/workflows/temporary-vgp-dynamic-light.yml
+      - SGX/VGP/DynamicShotFlashLighting.vp
+      - SGX/VGP/README.md
+
+permissions:
+  contents: write
+
+jobs:
+  compile:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install 32-bit runtime
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y libc6-i386 lib32gcc-s1 lib32stdc++6
+
+      - name: Compile dynamic-light VGP shader
+        shell: bash
+        run: |
+          set -euo pipefail
+          compiler='SGX/SDK_BIN/Graphics_SDK_setuplinux_4_03_00_02/GFX_Linux_SDK/OGLES/SDKPackage/Utilities/VGPCompiler/Linux/VGPCompiler'
+          mkdir -p SGX/VGP/build
+          set +e
+          "$compiler" -iSGX/VGP/DynamicShotFlashLighting.vp -oSGX/VGP/build/DynamicShotFlashLighting -target=generic > SGX/VGP/build/dynamic-light-compiler.log 2>&1
+          status=$?
+          set -e
+          cat SGX/VGP/build/dynamic-light-compiler.log
+          if [ "$status" -ne 0 ]; then
+            echo "VGPCompiler exited with status $status" >&2
+            exit "$status"
+          fi
+          test -s SGX/VGP/build/DynamicShotFlashLighting.bin
+          test -s SGX/VGP/build/DynamicShotFlashLighting.h
+          ls -lh SGX/VGP/build/DynamicShotFlashLighting.bin SGX/VGP/build/DynamicShotFlashLighting.h
+
+      - name: Publish compile output temporarily
+        if: always()
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f SGX/VGP/build/
+          git commit -m 'Temporary dynamic-light VGP compile output'
+          git push origin "HEAD:${GITHUB_REF_NAME}"
