@@ -71,7 +71,7 @@ PARAM spotColour = program.local[8];
 PARAM cone       = program.local[9];
 PARAM fill       = program.local[10];
 
-TEMP eyePos, n, len, basis, shA, shB, lit, delta, ldir, distSq, invDist, atten, scratch;
+TEMP eyePos, n, distSq, invDist, delta, ldir, atten, lit, scratch;
 
 # Project the vertex and compute its eye-space position.
 DP4 result.position.x, mvp[0], iPos;
@@ -87,28 +87,28 @@ DP4 eyePos.w, mv[3], iPos;
 DP3 n.x, mv[0], iNormal;
 DP3 n.y, mv[1], iNormal;
 DP3 n.z, mv[2], iNormal;
-DP3 len.x, n, n;
-MAX len.x, len.x, 0.0001;
-RSQ len.x, len.x;
-MUL n.xyz, n, len.x;
+DP3 distSq.x, n, n;
+MAX distSq.x, distSq.x, 0.0001;
+RSQ invDist.x, distSq.x;
+MUL n.xyz, n, invDist.x;
 MOV n.w, 1.0;
 
 # Nine-term second-order SH diffuse irradiance.
-DP4 shA.x, cAr, n;
-DP4 shA.y, cAg, n;
-DP4 shA.z, cAb, n;
-MUL basis.x, n.x, n.y;
-MUL basis.y, n.y, n.z;
-MUL basis.z, n.z, n.z;
-MUL basis.w, n.x, n.z;
-DP4 shB.x, cBr, basis;
-DP4 shB.y, cBg, basis;
-DP4 shB.z, cBb, basis;
-ADD lit.xyz, shA, shB;
-MUL scratch.x, n.x, n.x;
-MUL scratch.y, n.y, n.y;
-SUB scratch.x, scratch.x, scratch.y;
-MAD lit.xyz, cC, scratch.x, lit;
+DP4 lit.x, cAr, n;
+DP4 lit.y, cAg, n;
+DP4 lit.z, cAb, n;
+MUL delta.x, n.x, n.y;
+MUL delta.y, n.y, n.z;
+MUL delta.z, n.z, n.z;
+MUL delta.w, n.x, n.z;
+DP4 scratch.x, cBr, delta;
+DP4 scratch.y, cBg, delta;
+DP4 scratch.z, cBb, delta;
+ADD lit.xyz, lit, scratch;
+MUL delta.x, n.x, n.x;
+MUL delta.y, n.y, n.y;
+SUB delta.x, delta.x, delta.y;
+MAD lit.xyz, cC, delta.x, lit;
 
 # Directional sun. Direction points from the surface toward the light.
 DP3 scratch.x, n, sunDir;
