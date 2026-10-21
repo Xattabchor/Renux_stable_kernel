@@ -1,0 +1,74 @@
+!!IMGvp1.0
+# Vertex-generated screen-space glass refraction approximation for IMG VGP.
+# The opaque scene must already be available as a 2D texture. The fixed-function
+# texture stage samples that image using the projective coordinates generated
+# below; the primary colour applies glass tint and opacity.
+#
+# Inputs:
+#   vertex.position  object-space position, w=1
+#   vertex.normal    object-space normal; front-facing glass normals point
+#                    toward the eye after the modelview transform
+#
+# State matrices:
+#   mvp[0..3]        state.matrix.mvp
+#   mv[0..3]         state.matrix.modelview
+#
+# Environment parameters:
+#   env[8].x/y       screen-UV refraction scale (signed normalized UV units)
+#   env[9].xyzw      glass tint RGB and opacity alpha
+#   env[10..15]      unused
+#
+# This is a low-cost vertex approximation, not per-pixel Snell refraction.
+# It assumes rigid/uniform model transforms so modelview's 3x3 is valid for
+# normals. Use the fixed-function texture matrix for a Y flip if the copied
+# background texture's orientation differs from the framebuffer.
+
+ATTRIB iPos    = vertex.position;
+ATTRIB iNormal = vertex.normal;
+
+PARAM mvp[4] = { state.matrix.mvp };
+PARAM mv[4]  = { state.matrix.modelview };
+PARAM bend   = program.env[8];
+PARAM tint   = program.env[9];
+
+TEMP clip, n, scratch, tc;
+
+# Clip-space position (also supplies projective screen coordinates).
+DP4 clip.x, mvp[0], iPos;
+DP4 clip.y, mvp[1], iPos;
+DP4 clip.z, mvp[2], iPos;
+DP4 clip.w, mvp[3], iPos;
+MOV result.position, clip;
+
+# Eye-space normal, normalized for a stable grazing-angle response.
+DP3 n.x, mv[0], iNormal;
+DP3 n.y, mv[1], iNormal;
+DP3 n.z, mv[2], iNormal;
+DP3 scratch.x, n, n;
+RSQ scratch.x, scratch.x;
+MUL n.xyz, n, scratch.x;
+
+# Cheap edge weighting: front-on surfaces barely distort; grazing angles
+# distort more. The signed bend scale controls direction and magnitude.
+SUB scratch.y, 1.0, n.z;
+
+# Projective screen UV numerator: (clip.xy / clip.w + 1) / 2.
+# Store clip.w as Q so the fixed-function texture stage performs the divide.
+MUL tc.x, clip.x, 0.5;
+MAD tc.x, clip.w, 0.5, tc.x;
+MUL tc.y, clip.y, 0.5;
+MAD tc.y, clip.w, 0.5, tc.y;
+
+MUL scratch.z, n.x, scratch.y;
+MUL scratch.z, scratch.z, bend.x;
+MAD tc.x, scratch.z, clip.w, tc.x;
+MUL scratch.z, n.y, scratch.y;
+MUL scratch.z, scratch.z, bend.y;
+MAD tc.y, scratch.z, clip.w, tc.y;
+MOV tc.z, 0.0;
+MOV tc.w, clip.w;
+MOV result.texcoord[0], tc;
+
+# Modulate the sampled background by glass tint; alpha controls blending.
+MOV result.color, tint;
+END
