@@ -8,7 +8,7 @@ Starting section 0
 Ending section 0
 Starting section 1
 Ending section 1
-Compiling /tmp/vgp-bones-zs49j27d/BoneSkinning_01 ...
+Compiling /tmp/vgp-bones-hh3olrol/BoneSkinning_01 ...
 
 Compiled OK.
 
@@ -24,7 +24,7 @@ Starting section 0
 Ending section 0
 Starting section 1
 Ending section 1
-Compiling /tmp/vgp-bones-zs49j27d/BoneSkinning_02 ...
+Compiling /tmp/vgp-bones-hh3olrol/BoneSkinning_02 ...
 
 Compiled OK.
 
@@ -40,7 +40,7 @@ Starting section 0
 Ending section 0
 Starting section 1
 Ending section 1
-Compiling /tmp/vgp-bones-zs49j27d/BoneSkinning_03 ...
+Compiling /tmp/vgp-bones-hh3olrol/BoneSkinning_03 ...
 
 Compiled OK.
 
@@ -56,7 +56,7 @@ Starting section 0
 Ending section 0
 Starting section 1
 Ending section 1
-Compiling /tmp/vgp-bones-zs49j27d/BoneSkinning_04 ...
+Compiling /tmp/vgp-bones-hh3olrol/BoneSkinning_04 ...
 
 Compiled OK.
 
@@ -72,7 +72,7 @@ Starting section 0
 Ending section 0
 Starting section 1
 Ending section 1
-Compiling /tmp/vgp-bones-zs49j27d/BoneSkinning_05 ...
+Compiling /tmp/vgp-bones-hh3olrol/BoneSkinning_05 ...
 
 Compiled OK.
 
@@ -83,9 +83,9 @@ Compiled OK.
 
 *************** Compiler Log ***************
 
-Error: Array index for Env/Local Params is out of range (17), max is 16
+Error: Array index for Env/Local Params is out of range (16), max is 16
 Line 11:
-PARAM boneRows[18] = { program.local[0..17] };
+PARAM boneRows[18] = { program.local[0..16], program.env[0..0] };
                                         ^
 Failed to compile.
 
