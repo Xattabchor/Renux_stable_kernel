@@ -2,7 +2,13 @@
 
 *************** Compiler Log ***************
 
-Error: Too many TEMP regs declared, ARBVP_MAX_TEMP_REGS = 14
-Failed to compile.
+Flags: 00000030
+Starting section 0
+Ending section 0
+Starting section 1
+Ending section 1
+Compiling SGX/VGP/build/CustomLighting ...
+
+Compiled OK.
 
 ************* End Compiler Log *************
