@@ -1,9 +1,0 @@
-probe=armvp_instructions_512
-exit=0
-command=/home/runner/work/Renux_stable_kernel/Renux_stable_kernel/SGX/SDK_BIN/Graphics_SDK_setuplinux_4_03_00_02/GFX_Linux_SDK/OGLES/SDKPackage/Utilities/VGPCompiler/Linux/VGPCompiler -i/tmp/vgp-probe-evrc16y6/armvp_instructions_512.vp -ovgp-target-probe/out/armvp_instructions_512 -do -target=armvp
-*************** Compiler Log ***************
-
-Error: Too many instructions, ARBVP_MAX_INSTRUCTIONS = 256
-Failed to compile.
-
-************* End Compiler Log *************
