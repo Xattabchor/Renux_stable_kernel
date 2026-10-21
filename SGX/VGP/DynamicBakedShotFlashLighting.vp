@@ -1,0 +1,128 @@
+!!IMGvp1.0
+# Combines pre-baked per-vertex illumination with dynamic per-vertex lighting
+# for a transient shot flash and a camera/weapon flashlight. Dynamic lights
+# use program environment parameters, not glLight* state. The baked RGB input
+# is an illumination term, not albedo; the ordinary texture stage modulates
+# the combined illumination with the material/albedo texture.
+#
+# Inputs:
+#   vertex.position     object-space position, w=1
+#   vertex.normal       object-space normal
+#   vertex.color        pre-baked static illumination (RGB; alpha ignored)
+#   vertex.texcoord[0]  material UV
+#
+# State matrices:
+#   mvp[0..3]  state.matrix.mvp
+#   mv[0..3]   state.matrix.modelview
+#
+# Upload these vec4 values each frame using glProgramEnvParameter4fvARB:
+#   env[8]  shotPosEye.xyz, inverseShotRadiusSquared
+#   env[9]  shotColour.rgb, shotIntensity (set intensity to zero when inactive)
+#   env[10] flashlightPosEye.xyz, inverseFlashRangeSquared
+#   env[11] normalized flashlight direction in eye space; direction points
+#           from the lamp down the beam (w unused)
+#   env[12] flashlightColour.rgb, flashlightIntensity
+#   env[13] coneScale, coneBias, unused, unused
+#           coneScale = 1/(innerCos - outerCos)
+#           coneBias  = -outerCos/(innerCos - outerCos)
+#   env[14] dynamic ambient/fill contribution already multiplied by intensity
+#           (xyz); w unused
+#   env[15] unused
+#
+# A camera-mounted flashlight can use position (0,0,0) and direction (0,0,-1)
+# in eye space. Transform world-space event/light positions and directions to
+# eye space on the host. The point-flash radius and flashlight range are
+# smooth squared-distance cutoffs; their inverse squares are uploaded above.
+# Normals use the modelview upper 3x3, so transforms should be rigid or uniform.
+#
+# This is vertex lighting: each source is evaluated per vertex and interpolated.
+# It is not a writable lightmap texture or per-pixel lighting.
+
+ATTRIB iPos      = vertex.position;
+ATTRIB iNormal   = vertex.normal;
+ATTRIB iBaked    = vertex.color;
+ATTRIB iTexCoord = vertex.texcoord[0];
+
+PARAM mvp[4] = { state.matrix.mvp };
+PARAM mv[4]  = { state.matrix.modelview };
+PARAM shotPos     = program.env[8];
+PARAM shotColour  = program.env[9];
+PARAM flashPos    = program.env[10];
+PARAM flashDir    = program.env[11];
+PARAM flashColour = program.env[12];
+PARAM cone        = program.env[13];
+PARAM ambient     = program.env[14];
+
+TEMP clip, eyePos, n, delta, ldir, distSq, invDist, ndotl, falloff, atten, lit;
+
+# Transform position to clip and eye space.
+DP4 clip.x, mvp[0], iPos;
+DP4 clip.y, mvp[1], iPos;
+DP4 clip.z, mvp[2], iPos;
+DP4 clip.w, mvp[3], iPos;
+MOV result.position, clip;
+DP4 eyePos.x, mv[0], iPos;
+DP4 eyePos.y, mv[1], iPos;
+DP4 eyePos.z, mv[2], iPos;
+DP4 eyePos.w, mv[3], iPos;
+
+# Transform and normalize the normal in eye space.
+DP3 n.x, mv[0], iNormal;
+DP3 n.y, mv[1], iNormal;
+DP3 n.z, mv[2], iNormal;
+DP3 distSq.x, n, n;
+MAX distSq.x, distSq.x, 0.0001;
+RSQ invDist.x, distSq.x;
+MUL n.xyz, n, invDist.x;
+
+# Transient point light for a shot/muzzle flash.
+SUB delta.xyz, shotPos, eyePos;
+DP3 distSq.x, delta, delta;
+MAX distSq.x, distSq.x, 0.0001;
+RSQ invDist.x, distSq.x;
+MUL ldir.xyz, delta, invDist.x;
+DP3 ndotl.x, n, ldir;
+MAX ndotl.x, ndotl.x, 0.0;
+MUL falloff.x, distSq.x, shotPos.w;
+SUB falloff.x, 1.0, falloff.x;
+MAX falloff.x, falloff.x, 0.0;
+MUL falloff.x, falloff.x, falloff.x;
+MUL atten.x, invDist.x, invDist.x;
+MUL atten.x, atten.x, falloff.x;
+MUL atten.x, atten.x, ndotl.x;
+MUL atten.x, atten.x, shotColour.w;
+MUL lit.xyz, shotColour, atten.x;
+
+# Flashlight spotlight. ldir points from the shaded vertex toward the lamp;
+# -ldir therefore points from the lamp toward the vertex, along the beam.
+SUB delta.xyz, flashPos, eyePos;
+DP3 distSq.x, delta, delta;
+MAX distSq.x, distSq.x, 0.0001;
+RSQ invDist.x, distSq.x;
+MUL ldir.xyz, delta, invDist.x;
+DP3 ndotl.x, n, ldir;
+MAX ndotl.x, ndotl.x, 0.0;
+DP3 falloff.x, -ldir, flashDir;
+MAD falloff.x, falloff.x, cone.x, cone.y;
+MAX falloff.x, falloff.x, 0.0;
+MIN falloff.x, falloff.x, 1.0;
+MUL atten.x, distSq.x, flashPos.w;
+SUB atten.x, 1.0, atten.x;
+MAX atten.x, atten.x, 0.0;
+MUL atten.x, atten.x, atten.x;
+MUL atten.x, atten.x, falloff.x;
+MUL atten.x, atten.x, invDist.x;
+MUL atten.x, atten.x, invDist.x;
+MUL atten.x, atten.x, ndotl.x;
+MUL atten.x, atten.x, flashColour.w;
+MAD lit.xyz, flashColour, atten.x, lit;
+
+# Add optional dynamic fill and the pre-baked vertex illumination. Baked
+# light is present even when the shot and flashlight intensities are zero.
+ADD lit.xyz, lit, ambient;
+ADD lit.xyz, lit, iBaked;
+MIN lit.xyz, lit, 1.0;
+MOV result.color.xyz, lit;
+MOV result.color.w, 1.0;
+MOV result.texcoord[0], iTexCoord;
+END

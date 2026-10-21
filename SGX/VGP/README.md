@@ -79,3 +79,14 @@ resource limits. Compile for full VGP with the SDK compiler, for example:
 ```sh
 VGPCompiler -iDynamicShotFlashLighting.vp -oDynamicShotFlashLighting -target=generic
 ```
+
+### Combine baked vertex illumination with dynamic lights
+
+`DynamicBakedShotFlashLighting.vp` is the companion variant. It reads baked
+static illumination from `vertex.color.rgb`, then adds the same live shot and
+flashlight contributions before modulating the material texture. Enable the
+GLES color array and fill its RGB channels with baked illumination (not the
+material albedo); alpha is ignored. The live shot/flashlight parameters remain
+in `env[8..14]` and are updated by the host. Thus dark baked areas can still be
+lit by a shot or flashlight, while the baked contribution remains when those
+lights are off.
