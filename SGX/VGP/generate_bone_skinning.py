@@ -86,6 +86,8 @@ def compile_one(compiler: Path, source: Path, output_base: Path) -> tuple[bool, 
         text=True,
     )
     log = proc.stdout or ""
+    if proc.returncode != 0:
+        log += "\n[VGPCompiler exit code: %d]\n" % proc.returncode
     log_file.write_text(log)
     success = proc.returncode == 0 and "Compiled OK." in log and output_base.with_suffix(".bin").is_file()
     return success, log
