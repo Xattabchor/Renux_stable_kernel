@@ -1,0 +1,8 @@
+
+
+*************** Compiler Log ***************
+
+Error: Too many TEMP regs declared, ARBVP_MAX_TEMP_REGS = 14
+Failed to compile.
+
+************* End Compiler Log *************
