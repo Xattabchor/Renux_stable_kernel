@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Compare VGPCompiler resource ceilings across generic, ARM VP and VGP Lite."""
 from pathlib import Path
-import re
 import subprocess
 import sys
 import tempfile
@@ -30,22 +29,17 @@ def run(name, body, flags):
         for suffix in ('.h', '.bin'):
             Path(str(output) + suffix).unlink(missing_ok=True)
         print(f'===== {name} (exit {proc.returncode}) =====\n{text}\n')
-        return text
 
 
 for target, flags in targets.items():
     for bank in ('local', 'env'):
-        body = (f'PARAM p[256] = {{ program.{bank}[0..255] }};\n'
-                'TEMP sink;\nMOV sink, p[0];\nMOV result.position, vertex.position;')
-        text = run(f'{target}_{bank}_overflow', body, flags)
-        match = re.search(r'max is (\d+)', text)
-        if match:
-            count = int(match.group(1))
-            for requested in (count, count + 1):
-                last = requested - 1
-                body = (f'PARAM p[{requested}] = {{ program.{bank}[0..{last}] }};\n'
-                        'TEMP sink;\nMOV sink, p[0];\nMOV result.position, vertex.position;')
-                run(f'{target}_{bank}_{requested}', body, flags)
+        # Probe the observed 16-vector edge and the larger ranges mentioned in
+        # VGP/ARB references; the compiler result is authoritative per target.
+        for requested in (16, 17, 32, 48, 96, 97):
+            last = requested - 1
+            body = (f'PARAM p[{requested}] = {{ program.{bank}[0..{last}] }};\n'
+                    'TEMP sink;\nMOV sink, p[0];\nMOV result.position, vertex.position;')
+            run(f'{target}_{bank}_{requested}', body, flags)
 
     body = 'TEMP sink;\nMOV sink, vertex.position;\n'
     body += 'ADD sink, sink, vertex.position;\n' * 510
