@@ -1,0 +1,76 @@
+!!IMGvp1.0
+# Full VGP linear-blend skinning probe; bone rows are object-space 3x4 affine matrices.
+# Upload 3 vec4 rows per bone to program.local[0..14].
+# vertex.attrib[1] = four integer-valued bone indices; attrib[2] = four weights.
+# Output color visualizes the normalized skinned normal for validation.
+ATTRIB iPos = vertex.position;
+ATTRIB iNormal = vertex.normal;
+ATTRIB iBones = vertex.attrib[1];
+ATTRIB iWeights = vertex.attrib[2];
+ATTRIB iUV = vertex.texcoord[0];
+PARAM mvp[4] = { state.matrix.mvp };
+PARAM boneRows[15] = { program.local[0..14] };
+TEMP pAcc, nAcc, pTmp, nTmp;
+ADDRESS A0;
+MOV pAcc, 0.0;
+MOV nAcc, 0.0;
+# influence 0: reuse the same address and transform temporaries
+MUL pTmp.x, iBones.x, 3.0;
+ARL A0.x, pTmp.x;
+DP4 pTmp.x, boneRows[A0.x + 0], iPos;
+DP4 pTmp.y, boneRows[A0.x + 1], iPos;
+DP4 pTmp.z, boneRows[A0.x + 2], iPos;
+MAD pAcc.xyz, pTmp, iWeights.x, pAcc;
+MAD pAcc.w, iWeights.x, 1.0, pAcc.w;
+DP3 nTmp.x, boneRows[A0.x + 0], iNormal;
+DP3 nTmp.y, boneRows[A0.x + 1], iNormal;
+DP3 nTmp.z, boneRows[A0.x + 2], iNormal;
+MAD nAcc.xyz, nTmp, iWeights.x, nAcc;
+# influence 1: reuse the same address and transform temporaries
+MUL pTmp.x, iBones.y, 3.0;
+ARL A0.x, pTmp.x;
+DP4 pTmp.x, boneRows[A0.x + 0], iPos;
+DP4 pTmp.y, boneRows[A0.x + 1], iPos;
+DP4 pTmp.z, boneRows[A0.x + 2], iPos;
+MAD pAcc.xyz, pTmp, iWeights.y, pAcc;
+MAD pAcc.w, iWeights.y, 1.0, pAcc.w;
+DP3 nTmp.x, boneRows[A0.x + 0], iNormal;
+DP3 nTmp.y, boneRows[A0.x + 1], iNormal;
+DP3 nTmp.z, boneRows[A0.x + 2], iNormal;
+MAD nAcc.xyz, nTmp, iWeights.y, nAcc;
+# influence 2: reuse the same address and transform temporaries
+MUL pTmp.x, iBones.z, 3.0;
+ARL A0.x, pTmp.x;
+DP4 pTmp.x, boneRows[A0.x + 0], iPos;
+DP4 pTmp.y, boneRows[A0.x + 1], iPos;
+DP4 pTmp.z, boneRows[A0.x + 2], iPos;
+MAD pAcc.xyz, pTmp, iWeights.z, pAcc;
+MAD pAcc.w, iWeights.z, 1.0, pAcc.w;
+DP3 nTmp.x, boneRows[A0.x + 0], iNormal;
+DP3 nTmp.y, boneRows[A0.x + 1], iNormal;
+DP3 nTmp.z, boneRows[A0.x + 2], iNormal;
+MAD nAcc.xyz, nTmp, iWeights.z, nAcc;
+# influence 3: reuse the same address and transform temporaries
+MUL pTmp.x, iBones.w, 3.0;
+ARL A0.x, pTmp.x;
+DP4 pTmp.x, boneRows[A0.x + 0], iPos;
+DP4 pTmp.y, boneRows[A0.x + 1], iPos;
+DP4 pTmp.z, boneRows[A0.x + 2], iPos;
+MAD pAcc.xyz, pTmp, iWeights.w, pAcc;
+MAD pAcc.w, iWeights.w, 1.0, pAcc.w;
+DP3 nTmp.x, boneRows[A0.x + 0], iNormal;
+DP3 nTmp.y, boneRows[A0.x + 1], iNormal;
+DP3 nTmp.z, boneRows[A0.x + 2], iNormal;
+MAD nAcc.xyz, nTmp, iWeights.w, nAcc;
+DP4 result.position.x, mvp[0], pAcc;
+DP4 result.position.y, mvp[1], pAcc;
+DP4 result.position.z, mvp[2], pAcc;
+DP4 result.position.w, mvp[3], pAcc;
+DP3 pTmp.x, nAcc, nAcc;
+MAX pTmp.x, pTmp.x, 0.0001;
+RSQ pTmp.x, pTmp.x;
+MUL nAcc.xyz, nAcc, pTmp.x;
+MAD result.color.xyz, nAcc, 0.5, 0.5;
+MOV result.color.w, 1.0;
+MOV result.texcoord[0], iUV;
+END

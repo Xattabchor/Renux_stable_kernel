@@ -1,0 +1,93 @@
+=== 1 bones: PASS ===
+
+
+*************** Compiler Log ***************
+
+Flags: 00000030
+Starting section 0
+Ending section 0
+Starting section 1
+Ending section 1
+Compiling /tmp/vgp-bones-zs49j27d/BoneSkinning_01 ...
+
+Compiled OK.
+
+************* End Compiler Log *************
+
+=== 2 bones: PASS ===
+
+
+*************** Compiler Log ***************
+
+Flags: 00000030
+Starting section 0
+Ending section 0
+Starting section 1
+Ending section 1
+Compiling /tmp/vgp-bones-zs49j27d/BoneSkinning_02 ...
+
+Compiled OK.
+
+************* End Compiler Log *************
+
+=== 3 bones: PASS ===
+
+
+*************** Compiler Log ***************
+
+Flags: 00000030
+Starting section 0
+Ending section 0
+Starting section 1
+Ending section 1
+Compiling /tmp/vgp-bones-zs49j27d/BoneSkinning_03 ...
+
+Compiled OK.
+
+************* End Compiler Log *************
+
+=== 4 bones: PASS ===
+
+
+*************** Compiler Log ***************
+
+Flags: 00000030
+Starting section 0
+Ending section 0
+Starting section 1
+Ending section 1
+Compiling /tmp/vgp-bones-zs49j27d/BoneSkinning_04 ...
+
+Compiled OK.
+
+************* End Compiler Log *************
+
+=== 5 bones: PASS ===
+
+
+*************** Compiler Log ***************
+
+Flags: 00000030
+Starting section 0
+Ending section 0
+Starting section 1
+Ending section 1
+Compiling /tmp/vgp-bones-zs49j27d/BoneSkinning_05 ...
+
+Compiled OK.
+
+************* End Compiler Log *************
+
+=== 6 bones: FAIL ===
+
+
+*************** Compiler Log ***************
+
+Error: Array index for Env/Local Params is out of range (17), max is 16
+Line 11:
+PARAM boneRows[18] = { program.local[0..17] };
+                                        ^
+Failed to compile.
+
+************* End Compiler Log *************
+
