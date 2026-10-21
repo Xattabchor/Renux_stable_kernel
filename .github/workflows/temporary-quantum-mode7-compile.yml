@@ -1,0 +1,48 @@
+name: Temporary Quantum mode 7 VGP compile
+
+on:
+  push:
+    branches:
+      - arena/0db9be99-renux-stable-kernel
+    paths:
+      - .github/workflows/temporary-quantum-mode7-compile.yml
+      - SGX/VGP/QuantumMode7Glass.vp
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install 32-bit runtime
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y libc6-i386 lib32gcc-s1 lib32stdc++6
+
+      - name: Compile full VGP shader
+        shell: bash
+        run: |
+          set -euo pipefail
+          compiler='SGX/SDK_BIN/Graphics_SDK_setuplinux_4_03_00_02/GFX_Linux_SDK/OGLES/SDKPackage/Utilities/VGPCompiler/Linux/VGPCompiler'
+          output="$RUNNER_TEMP/QuantumMode7Glass"
+          log="$RUNNER_TEMP/QuantumMode7Glass_generic.log"
+          "$compiler" -iSGX/VGP/QuantumMode7Glass.vp -o"$output" -target=generic > "$log" 2>&1
+          cat "$log"
+          test -s "$output.bin"
+          test -s "$output.h"
+          ls -lh "$output.bin" "$output.h"
+
+      - name: Upload compiler output
+        uses: actions/upload-artifact@v4
+        with:
+          name: quantum-mode7-vgp-build
+          path: |
+            ${{ runner.temp }}/QuantumMode7Glass.bin
+            ${{ runner.temp }}/QuantumMode7Glass.h
+            ${{ runner.temp }}/QuantumMode7Glass_generic.log
+          if-no-files-found: error
