@@ -155,11 +155,21 @@ project along the light-ray direction. This gives the correct hard-shadow
 footprint for the planar receiver. Blur radius can be chosen from the light's
 angular size and caster-to-water distance for a plausible penumbra.
 
-`MBXWaterShadowBlur.h` provides a separable 5-tap Gaussian alpha blur for an
+`MBXWaterShadowProjection.h` provides CPU projection helpers for point and
+directional lights and expands indexed caster triangles into projected
+triangles. Pass caster vertices, 16-bit indices, and the light in the same
+coordinate frame; for a point light pass `pointLight=1`, for a directional ray
+pass `pointLight=0`. Allocate output capacity of at least `indexCount` vertices.
+Triangles with any vertex on/below the receiver plane are skipped. Render the
+resulting triangles top-down into a low-resolution RGBA mask over the water's
+XZ bounds, with depth testing disabled, white RGB, and alpha one. Clear alpha
+to zero first. Use `GL_ONE, GL_ONE_MINUS_SRC_ALPHA` so overlapping opaque
+triangles form a union rather than darkening each other.
+
+`MBXWaterShadowBlur.h` provides a separable 5-tap Gaussian alpha blur for the
 RGBA8 mask. Repeated blur or a smaller mask gives a wider, cheaper penumbra.
-Clear the mask to alpha zero; draw the projected opaque triangles with alpha
-one so their union remains opaque before filtering. Rebuild the mask when a
-caster or light moves, not every frame if both are static.
+Rebuild the mask when a caster or light moves, not every frame if both are
+static.
 
 For the overlay pass, upload `env[0..3]` as the water-object-to-mask projective
 matrix and `env[4].x` as shadow strength. Bind the white-RGB/soft-alpha mask on

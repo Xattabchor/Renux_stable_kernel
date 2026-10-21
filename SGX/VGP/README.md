@@ -46,8 +46,9 @@ Fresnel blending, and CPU-generated wave displacement/normals. The host-side
 wave helper is `MBXWaterWaves.h`; see `MBXWater.md` for the render-to-texture
 sequence and MBX two-layer combiner setup. `MBXWaterShadow.vp` projects a
 filtered planar shadow mask onto the animated surface, and
-`MBXWaterShadowBlur.h` provides a small CPU alpha blur. These shadows have a
-soft filtered penumbra, not programmable PCF.
+`MBXWaterShadowProjection.h` projects caster triangles onto the mean water
+plane, and `MBXWaterShadowBlur.h` provides a small CPU alpha blur. These shadows
+have a soft filtered penumbra, not programmable PCF.
 
 Build the water shaders for full VGP as follows:
 
