@@ -20,7 +20,7 @@ DEFAULT_COMPILER = ROOT / "SGX/SDK_BIN/Graphics_SDK_setuplinux_4_03_00_02/GFX_Li
 
 def make_source(bones: int) -> str:
     rows = bones * 3
-    local_rows = min(rows, 17)
+    local_rows = min(rows, 16)
     env_rows = rows - local_rows
     param_ranges = []
     if local_rows:
@@ -138,7 +138,7 @@ def main() -> int:
         shutil.copyfile(last_base.with_suffix(".h"), out_dir / "BoneSkinningMax.h")
 
     rows = last_success * 3
-    local_rows = min(rows, 17)
+    local_rows = min(rows, 16)
     env_rows = rows - local_rows
     summary = "Maximum contiguous palette compiled: %d bones (3 vec4 rows per bone, %d parameter rows: %d local + %d environment)." % (
         last_success, rows, local_rows, env_rows
