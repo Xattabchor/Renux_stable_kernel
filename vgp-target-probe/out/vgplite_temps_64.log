@@ -1,6 +1,6 @@
 probe=vgplite_temps_64
 exit=0
-command=/home/runner/work/Renux_stable_kernel/Renux_stable_kernel/SGX/SDK_BIN/Graphics_SDK_setuplinux_4_03_00_02/GFX_Linux_SDK/OGLES/SDKPackage/Utilities/VGPCompiler/Linux/VGPCompiler -i/tmp/vgp-probe-cecwc_0x/vgplite_temps_64.vp -ovgp-target-probe/out/vgplite_temps_64 -do -vgplite -target=generic
+command=/home/runner/work/Renux_stable_kernel/Renux_stable_kernel/SGX/SDK_BIN/Graphics_SDK_setuplinux_4_03_00_02/GFX_Linux_SDK/OGLES/SDKPackage/Utilities/VGPCompiler/Linux/VGPCompiler -i/tmp/vgp-probe-hx7f7lep/vgplite_temps_64.vp -ovgp-target-probe/out/vgplite_temps_64 -do -vgplite -target=generic
 *************** Compiler Log ***************
 
 Error: Too many TEMP regs declared, ARBVP_MAX_TEMP_REGS = 14

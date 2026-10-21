@@ -1,0 +1,12 @@
+probe=vgplite_env_97
+exit=0
+command=/home/runner/work/Renux_stable_kernel/Renux_stable_kernel/SGX/SDK_BIN/Graphics_SDK_setuplinux_4_03_00_02/GFX_Linux_SDK/OGLES/SDKPackage/Utilities/VGPCompiler/Linux/VGPCompiler -i/tmp/vgp-probe-ejgtfc70/vgplite_env_97.vp -ovgp-target-probe/out/vgplite_env_97 -vgplite -target=generic
+*************** Compiler Log ***************
+
+Error: Array index for Env/Local Params is out of range (96), max is 16
+Line 1:
+PARAM p[97] = { program.env[0..96] };
+                               ^
+Failed to compile.
+
+************* End Compiler Log *************

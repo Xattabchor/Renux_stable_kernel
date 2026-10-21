@@ -1,0 +1,15 @@
+probe=generic_env_16
+exit=0
+command=/home/runner/work/Renux_stable_kernel/Renux_stable_kernel/SGX/SDK_BIN/Graphics_SDK_setuplinux_4_03_00_02/GFX_Linux_SDK/OGLES/SDKPackage/Utilities/VGPCompiler/Linux/VGPCompiler -i/tmp/vgp-probe-ibqerb3b/generic_env_16.vp -ovgp-target-probe/out/generic_env_16 -target=generic
+*************** Compiler Log ***************
+
+Flags: 00000030
+Starting section 0
+Ending section 0
+Starting section 1
+Ending section 1
+Compiling vgp-target-probe/out/generic_env_16 ...
+
+Compiled OK.
+
+************* End Compiler Log *************

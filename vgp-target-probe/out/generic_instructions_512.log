@@ -1,6 +1,6 @@
 probe=generic_instructions_512
 exit=0
-command=/home/runner/work/Renux_stable_kernel/Renux_stable_kernel/SGX/SDK_BIN/Graphics_SDK_setuplinux_4_03_00_02/GFX_Linux_SDK/OGLES/SDKPackage/Utilities/VGPCompiler/Linux/VGPCompiler -i/tmp/vgp-probe-ergm5u8j/generic_instructions_512.vp -ovgp-target-probe/out/generic_instructions_512 -do -target=generic
+command=/home/runner/work/Renux_stable_kernel/Renux_stable_kernel/SGX/SDK_BIN/Graphics_SDK_setuplinux_4_03_00_02/GFX_Linux_SDK/OGLES/SDKPackage/Utilities/VGPCompiler/Linux/VGPCompiler -i/tmp/vgp-probe-od5ci5oi/generic_instructions_512.vp -ovgp-target-probe/out/generic_instructions_512 -do -target=generic
 *************** Compiler Log ***************
 
 Error: Too many instructions, ARBVP_MAX_INSTRUCTIONS = 256

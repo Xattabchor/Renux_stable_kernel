@@ -1,0 +1,12 @@
+probe=armvp_local_96
+exit=0
+command=/home/runner/work/Renux_stable_kernel/Renux_stable_kernel/SGX/SDK_BIN/Graphics_SDK_setuplinux_4_03_00_02/GFX_Linux_SDK/OGLES/SDKPackage/Utilities/VGPCompiler/Linux/VGPCompiler -i/tmp/vgp-probe-w_xqsk2k/armvp_local_96.vp -ovgp-target-probe/out/armvp_local_96 -target=armvp
+*************** Compiler Log ***************
+
+Error: Array index for Env/Local Params is out of range (95), max is 16
+Line 1:
+PARAM p[96] = { program.local[0..95] };
+                                 ^
+Failed to compile.
+
+************* End Compiler Log *************
