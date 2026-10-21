@@ -1,5 +1,44 @@
 # PhantomMask spherical-harmonics VGP port
 
+## Maximum affine bone-skinning palette
+
+`build/BoneSkinningMax.vp` is a full-VGP linear-blend skinning shader compiled
+by this SDK's `VGPCompiler` for `-target=generic`. It processes four influences
+sequentially while reusing four TEMP registers. Each bone is an object-space
+3x4 affine matrix stored as three `vec4` rows; the shader accumulates weighted
+position and normal, normalizes the result, transforms position by the MVP, and
+writes the normalized normal as debug vertex colour.
+
+The tested compiler ceiling is **10 bones** for this representation. The
+accepted program uses 30 parameter rows: `program.local[0..15]` for the first
+16 rows and `program.env[0..13]` for the remaining 14. Eleven bones require 33
+rows and fail because parameter index 16 is out of range (valid bank indices
+are 0 through 15). The test used 4 declared TEMP registers, so the 10-bone
+limit is the parameter-bank ceiling, not a TEMP-register failure. The actual
+compiler log and first rejected candidate are preserved in
+`build/BoneSkinning_search.log`; `build/BoneSkinningMax.txt` summarizes them.
+
+Vertex inputs are `position`, `normal`, `texcoord[0]`, four integer-valued
+bone indices in `attrib[1]` (range 0..9), and four weights in `attrib[2]`.
+Weights should sum to 1.0. Upload each bone's three rows consecutively: rows
+0..15 with `glProgramLocalParameter4fvARB`, then rows 16..29 with
+`glProgramEnvParameter4fvARB`. Use rigid or uniform-scale bone transforms; the
+shader applies each bone's upper 3x3 directly to normals before renormalizing.
+The generated `build/BoneSkinningMax.bin` is the compiled program and
+`build/BoneSkinningMax.h` is the compiler's C array form.
+
+Reproduce the sequential compiler probe on Linux with the SDK's 32-bit runtime
+installed (`libc6-i386`, `lib32gcc-s1`, and `lib32stdc++6`):
+
+```sh
+python3 SGX/VGP/generate_bone_skinning.py --max-try 64
+```
+
+The generator retains the largest passing shader, `.bin`, `.h`, and a complete
+search log under `build/`. This is compile validation against the generic VGP
+target; it does not assert that a particular device/runtime exposes the same
+register-bank capacities.
+
 `PhantomMask_SH.vp` is an IMG Vertex Program (VGP) port of the OGLES2 SDK
 sample's `SHVertShader.vsh`. It evaluates the same nine-term second-order
 spherical-harmonic lighting expression; it is a lighting shader, not a skinning

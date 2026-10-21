@@ -6,7 +6,6 @@ small TEMP set. A 3x4 affine matrix is uploaded as three vec4 parameter rows,
 split across local and environment parameter banks when needed.
 """
 import argparse
-import os
 import shutil
 import subprocess
 import sys
