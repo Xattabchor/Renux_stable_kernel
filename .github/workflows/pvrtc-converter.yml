@@ -39,7 +39,15 @@ jobs:
           cp -a SGX/VGP/PVRTCConverter/. "$project/"
           echo "SYMBIAN_PROJECT=$project" >> "$GITHUB_ENV"
       - name: Build ARMv6 E32 executable
-        run: symbian app build --project "$SYMBIAN_PROJECT"
+        shell: bash
+        run: |
+          set -o pipefail
+          if ! symbian app build --project "$SYMBIAN_PROJECT" 2>&1 | tee "$RUNNER_TEMP/pvrtc-build.log"; then
+            tail -n 24 "$RUNNER_TEMP/pvrtc-build.log" | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            exit 1
+          fi
       - name: Package SIS
         run: >-
           symbian package

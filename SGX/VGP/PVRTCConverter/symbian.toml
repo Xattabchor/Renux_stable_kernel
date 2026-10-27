@@ -1,7 +1,7 @@
 [project]
 architecture = "armv6"
 name = "pvrtc_converter"
-kind = "e32-import"
+kind = "e32-import-experiment"
 cmake_preset = "symbian-pic"
 uid3 = 0xe0000840
 
