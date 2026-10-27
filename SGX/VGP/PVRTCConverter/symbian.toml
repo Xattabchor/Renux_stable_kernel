@@ -1,0 +1,17 @@
+[project]
+architecture = "armv6"
+name = "pvrtc_converter"
+kind = "e32-import"
+cmake_preset = "symbian-pic"
+uid3 = 0xe0000840
+
+[package]
+uid = 0xe0000841
+name = "PVRTC1 Image Converter"
+vendor = "Renux"
+executable_name = "pvrtc_converter.exe"
+version = [1, 0, 0]
+
+[application]
+caption = "PVRTC1 Converter"
+short_caption = "PVRTC"

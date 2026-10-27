@@ -1,0 +1,10 @@
+{
+  "preferences": {
+    "name": "pvrtc_converter",
+    "uid3": 3758098496,
+    "architecture": "armv6",
+    "timer_tasks": false,
+    "ide": "intellij",
+    "port": 24704
+  }
+}
