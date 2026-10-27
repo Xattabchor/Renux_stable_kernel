@@ -4,10 +4,13 @@ project(PVRTCConverterHostTests LANGUAGES CXX)
 find_package(PNG REQUIRED)
 
 set(PVRTC_REFERENCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../third_party/pvrtc")
+set(PVRTC_HOST_TEST_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/pvrtc_converter_host_tests.cc")
+configure_file("${CMAKE_CURRENT_LIST_DIR}/../host_tests.cc.in"
+  "${PVRTC_HOST_TEST_SOURCE}" COPYONLY)
 
 add_executable(pvrtc_converter_tests
   "${CMAKE_CURRENT_LIST_DIR}/../converter.cc"
-  "${CMAKE_CURRENT_LIST_DIR}/../tests.cc"
+  "${PVRTC_HOST_TEST_SOURCE}"
   "${PVRTC_REFERENCE_DIR}/PVRTDecompress.cpp")
 target_include_directories(pvrtc_converter_tests PRIVATE
   "${CMAKE_CURRENT_LIST_DIR}/.."
