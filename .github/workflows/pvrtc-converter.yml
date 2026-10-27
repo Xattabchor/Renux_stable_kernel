@@ -43,9 +43,13 @@ jobs:
         run: |
           set -o pipefail
           if ! symbian app build --project "$SYMBIAN_PROJECT" 2>&1 | tee "$RUNNER_TEMP/pvrtc-build.log"; then
-            tail -n 24 "$RUNNER_TEMP/pvrtc-build.log" | while IFS= read -r line; do
+            diagnostic_lines=$(grep -Ei 'error:|undefined|duplicate|fatal|cannot|failed|ld[.]lld' "$RUNNER_TEMP/pvrtc-build.log" | tail -n 35 || true)
+            if [[ -z "$diagnostic_lines" ]]; then
+              diagnostic_lines=$(tail -n 35 "$RUNNER_TEMP/pvrtc-build.log")
+            fi
+            while IFS= read -r line; do
               echo "::error::$line"
-            done
+            done <<< "$diagnostic_lines"
             exit 1
           fi
       - name: Package SIS
