@@ -1,17 +1,17 @@
 [project]
 architecture = "armv6"
-name = "phantom_vgp_test"
+name = "phantommask"
 kind = "e32-import-experiment"
 cmake_preset = "symbian-pic"
 uid3 = 0xe0000836
 
 [package]
 uid = 0xe0000837
-name = "PhantomMask VGP Test"
+name = "PhantomMask"
 vendor = "Renux"
-executable_name = "phantom_vgp_test.exe"
+executable_name = "PhantomMask.exe"
 version = [0, 1, 0]
 
 [application]
-caption = "PhantomMask VGP Test"
-short_caption = "VGP Test"
+caption = "PhantomMask"
+short_caption = "PhantomMask"

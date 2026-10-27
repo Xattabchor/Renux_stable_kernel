@@ -1,13 +1,9 @@
-# PhantomMask VGP / GLES 1.1 test SIS
+# PhantomMask — Symbian GLES 1.1 / VGP port
 
-This is a small Symbian test application, not a port of the full PhantomMask demo. It requests an OpenGL ES 1.1 context, loads the precompiled IMG VGP SH vertex program embedded in the PowerVR SDK's `OGLESPhantomMask` demo, supplies a minimal set of spherical-harmonic environment parameters, and draws one triangle.
+This project packages the actual PhantomMask scene, not a geometry smoke test. The app renders the animated mask mesh from the PowerVR POD scene, draws the original room panorama behind it, applies the original nine-term SH coefficients through the compiled IMG VGP program, and runs the 451-frame scene animation at 30 fps. It requests an OpenGL ES 1.1 context.
 
-The VGP program is embedded in `vgp_program.h` (1328 bytes; `VGP ` binary signature). It was extracted from the `vgp_SHL_VGP` object in the SDK 4.03 `OGLES/SDKPackage/Binaries/CommonRaw/Demos/PhantomMask/OGLESPhantomMask` ELF. This uses a known compiled SDK program; it does not compile `SGX/VGP/PhantomMask_SH.vp` or claim that the shader's original assets/game renderer have been ported.
+`phantom_mask_scene_data.h` contains the mask mesh (2238 vertices, 4480 triangles), camera data, and per-frame model transforms generated from the SDK PhantomMask POD scene. `assets/MaskMain.pvr` and `assets/RoomStill.pvr` are the original PVR v2 texture files. Both were checked against the original files embedded in the OGLES1.1 SDK executable: `flags & 0xff == 0x19` (`OGL_PVRTC4`, PVRTC1 4 bpp), with their original mip chains and SHA-256 values. The build runs `verify_assets.py`; texture data is embedded unchanged and is not transcoded to PVRTC2.
 
-On a device with `GL_IMG_vertex_program` and the compatible VGP binary format, the app uses the SH VGP program and shows the triangle on a blue-black background. If the extension or procedure lookup is unavailable, it falls back to the GLES 1.1 fixed-function pipeline and shows a red-black background. Escape or the close request exits.
+The vertex shader is loaded from the repository's already-compiled `SGX/VGP/build/PhantomMask_SH.bin`, copied unchanged to `assets/PhantomMask_SH.bin` and embedded in the executable. Its `VGP ` signature, 1412-byte size, and SHA-256 are verified before compiling.
 
-## Build
-
-The `symbian-platform` 0.3.0 SDK archive used for this test was obtained from the user's Google Drive. Its SHA-256 matches the upstream release asset exactly: `9be830884a5fd1b9315ea1c11571810f7a50fa673851fa392bb397c6759fec3d`.
-
-The GitHub Actions workflow downloads that exact archive, verifies the SHA-256, builds the ARMv6 E32 executable, creates an unsigned SIS with application-menu registration, and uploads the SIS plus the package report as a workflow artifact. The SIS is an experimental SDK output: neither Symbian-loader acceptance nor execution on a physical VGP device is verified by compilation or packaging.
+The SIS is built with `symbian-platform` 0.3.0 using the SDK archive obtained from Google Drive. The archive SHA-256 is verified against the release asset before the build. The output is unsigned and marked as an experimental E32 executable by the SDK; successful packaging does not establish Symbian loader acceptance or runtime compatibility. Physical-device VGP rendering still needs testing.

@@ -1,4 +1,4 @@
-name: Build PhantomMask VGP test SIS
+name: Build PhantomMask Symbian SIS
 
 on:
   push:
@@ -34,20 +34,22 @@ jobs:
           mkdir -p "$project"
           cp -a SGX/VGP/PhantomMaskVGPTest/. "$project/"
           echo "SYMBIAN_PROJECT=$project" >> "$GITHUB_ENV"
+      - name: Verify original PVRTC1 textures
+        run: python SGX/VGP/PhantomMaskVGPTest/verify_assets.py
       - name: Build ARMv6 E32 executable
         run: symbian app build --project "$SYMBIAN_PROJECT"
       - name: Package SIS
         run: >-
           symbian package
           --project "$SYMBIAN_PROJECT"
-          --artifact "$SYMBIAN_PROJECT/.symbian/build/phantom_vgp_test.exe"
+          --artifact "$SYMBIAN_PROJECT/.symbian/build/phantommask.exe"
           --output "$RUNNER_TEMP/phantom-vgp-sis"
       - name: Upload SIS and package report
         uses: actions/upload-artifact@v4
         with:
-          name: PhantomMask-VGP-Test-SIS
+          name: PhantomMask-Symbian-GLES1.1-SIS
           path: |
-            ${{ runner.temp }}/phantom-vgp-sis/phantom_vgp_test.sis
+            ${{ runner.temp }}/phantom-vgp-sis/PhantomMask.sis
             ${{ runner.temp }}/phantom-vgp-sis/package-report.json
           if-no-files-found: error
           retention-days: 30
