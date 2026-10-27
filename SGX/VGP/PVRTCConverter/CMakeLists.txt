@@ -17,5 +17,6 @@ target_include_directories(pvrtc_converter PRIVATE "${PVRTC_REFERENCE_DIR}")
 target_link_libraries(pvrtc_converter PRIVATE
   Symbian::PortablePng
   Symbian::WindowServer
-  Symbian::Gdi)
+  Symbian::Gdi
+  Symbian::FileServer)
 symbian_publish_executable(pvrtc_converter UID3 0xe0000840)
