@@ -1,0 +1,53 @@
+name: Build Symbian GLES Extension Probe
+
+on:
+  push:
+    paths:
+      - "SGX/VGP/GlesExtensionProbe/**"
+      - ".github/workflows/gles-extension-probe.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Symbian CLI
+        run: python -m pip install "symbian-platform==0.3.0"
+      - name: Download and verify SDK 0.3.0
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_archive="$RUNNER_TEMP/symbian-sdk-0.3.0-linux-x86_64.tar.gz"
+          curl --fail --location --retry 4 --retry-all-errors \
+            "https://github.com/hpnkv/symbian-platform/releases/download/v0.3.0/symbian-sdk-0.3.0-linux-x86_64.tar.gz" \
+            --output "$sdk_archive"
+          echo "9be830884a5fd1b9315ea1c11571810f7a50fa673851fa392bb397c6759fec3d  $sdk_archive" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/symbian-sdk"
+          tar -xzf "$sdk_archive" -C "$RUNNER_TEMP/symbian-sdk"
+          project="$RUNNER_TEMP/symbian-sdk/examples/GlesExtensionProbe"
+          mkdir -p "$project"
+          cp -a SGX/VGP/GlesExtensionProbe/. "$project/"
+          echo "SYMBIAN_PROJECT=$project" >> "$GITHUB_ENV"
+      - name: Build ARMv6 E32 executable
+        run: symbian app build --project "$SYMBIAN_PROJECT"
+      - name: Package SIS
+        run: >-
+          symbian package
+          --project "$SYMBIAN_PROJECT"
+          --artifact "$SYMBIAN_PROJECT/.symbian/build/glesextprobe.exe"
+          --output "$RUNNER_TEMP/gles-extension-probe-sis"
+      - name: Upload SIS and package report
+        uses: actions/upload-artifact@v4
+        with:
+          name: Symbian-GLES-Extension-Probe-SIS
+          path: |
+            ${{ runner.temp }}/gles-extension-probe-sis/glesextprobe.sis
+            ${{ runner.temp }}/gles-extension-probe-sis/package-report.json
+          if-no-files-found: error
+          retention-days: 30

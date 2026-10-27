@@ -1,0 +1,321 @@
+#include "application.h"
+
+#include <e32std.h>
+#include <GLES/gl.h>
+
+#include <algorithm>
+#include <cstdint>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include "symbian/api/display/gles_window_context.h"
+#include "symbian/api/display/window_surface.h"
+
+namespace {
+using symbian::api::display::GlesWindowContext;
+using symbian::api::display::WindowInputKind;
+using symbian::api::display::WindowKey;
+using symbian::api::display::WindowSurface;
+
+struct Glyph {
+  char character;
+  std::uint8_t rows[5];
+};
+
+// Compact 3x5 pixel font. Lowercase glyphs are kept distinct so extension
+// names remain legible with their original spelling and case.
+constexpr Glyph kGlyphs[] = {
+    {' ', {0, 0, 0, 0, 0}}, {'A', {2, 5, 7, 5, 5}}, {'B', {6, 5, 6, 5, 6}},
+    {'C', {3, 4, 4, 4, 3}}, {'D', {6, 5, 5, 5, 6}}, {'E', {7, 4, 6, 4, 7}},
+    {'F', {7, 4, 6, 4, 4}}, {'G', {3, 4, 5, 5, 3}}, {'H', {5, 5, 7, 5, 5}},
+    {'I', {7, 2, 2, 2, 7}}, {'J', {1, 1, 1, 5, 2}}, {'K', {5, 5, 6, 5, 5}},
+    {'L', {4, 4, 4, 4, 7}}, {'M', {5, 7, 7, 5, 5}}, {'N', {5, 7, 7, 7, 5}},
+    {'O', {2, 5, 5, 5, 2}}, {'P', {6, 5, 6, 4, 4}}, {'Q', {2, 5, 5, 7, 3}},
+    {'R', {6, 5, 6, 5, 5}}, {'S', {3, 4, 2, 1, 6}}, {'T', {7, 2, 2, 2, 2}},
+    {'U', {5, 5, 5, 5, 7}}, {'V', {5, 5, 5, 5, 2}}, {'W', {5, 5, 7, 7, 5}},
+    {'X', {5, 5, 2, 5, 5}}, {'Y', {5, 5, 2, 2, 2}}, {'Z', {7, 1, 2, 4, 7}},
+    {'a', {0, 3, 1, 3, 5}}, {'b', {4, 4, 6, 5, 6}}, {'c', {0, 3, 4, 4, 3}},
+    {'d', {1, 1, 3, 5, 3}}, {'e', {2, 5, 6, 4, 3}}, {'f', {1, 2, 7, 2, 2}},
+    {'g', {3, 5, 3, 1, 6}}, {'h', {4, 4, 6, 5, 5}}, {'i', {2, 0, 2, 2, 2}},
+    {'j', {1, 0, 1, 5, 2}}, {'k', {4, 5, 6, 5, 5}}, {'l', {6, 2, 2, 2, 7}},
+    {'m', {0, 6, 7, 5, 5}}, {'n', {0, 6, 5, 5, 5}}, {'o', {0, 2, 5, 5, 2}},
+    {'p', {6, 5, 6, 4, 4}}, {'q', {3, 5, 3, 1, 1}}, {'r', {0, 5, 6, 4, 4}},
+    {'s', {3, 4, 2, 1, 6}}, {'t', {2, 7, 2, 2, 1}}, {'u', {0, 5, 5, 5, 3}},
+    {'v', {0, 5, 5, 5, 2}}, {'w', {0, 5, 5, 7, 5}}, {'x', {0, 5, 2, 2, 5}},
+    {'y', {5, 5, 3, 1, 6}}, {'z', {0, 7, 1, 2, 7}},
+    {'0', {7, 5, 5, 5, 7}}, {'1', {2, 6, 2, 2, 7}}, {'2', {6, 1, 2, 4, 7}},
+    {'3', {6, 1, 2, 1, 6}}, {'4', {5, 5, 7, 1, 1}}, {'5', {7, 4, 6, 1, 6}},
+    {'6', {3, 4, 6, 5, 2}}, {'7', {7, 1, 2, 2, 2}}, {'8', {2, 5, 2, 5, 2}},
+    {'9', {2, 5, 3, 1, 6}}, {'_', {0, 0, 0, 0, 7}}, {':', {0, 2, 0, 2, 0}},
+    {'.', {0, 0, 0, 0, 2}}, {'-', {0, 0, 7, 0, 0}}, {'/', {1, 1, 2, 4, 4}},
+    {'=', {0, 7, 0, 7, 0}}, {'+', {0, 2, 7, 2, 0}}, {'(', {1, 2, 2, 2, 1}},
+    {')', {4, 2, 2, 2, 4}}, {'?', {6, 1, 2, 0, 2}}, {',', {0, 0, 0, 2, 4}},
+};
+
+const Glyph& FindGlyph(char character) {
+  for (const Glyph& glyph : kGlyphs) {
+    if (glyph.character == character) return glyph;
+  }
+  for (const Glyph& glyph : kGlyphs) {
+    if (glyph.character == '?') return glyph;
+  }
+  return kGlyphs[0];
+}
+
+bool HasProc(const char* name) {
+  return GlesWindowContext::GetProcAddress(name) != nullptr;
+}
+
+bool HasExtension(std::string_view list, std::string_view wanted) {
+  std::size_t start = 0;
+  while (start < list.size()) {
+    while (start < list.size() && list[start] == ' ') ++start;
+    std::size_t end = list.find(' ', start);
+    if (end == std::string_view::npos) end = list.size();
+    if (list.substr(start, end - start) == wanted) return true;
+    start = end + 1;
+  }
+  return false;
+}
+
+void WrapAndAppend(std::vector<std::string>* lines, std::string_view text,
+                   std::size_t max_chars) {
+  if (!lines || max_chars == 0) return;
+  while (text.size() > max_chars) {
+    std::size_t split = text.rfind(' ', max_chars);
+    if (split == std::string_view::npos || split == 0) split = max_chars;
+    lines->emplace_back(text.substr(0, split));
+    text.remove_prefix(split);
+    while (!text.empty() && text.front() == ' ') text.remove_prefix(1);
+  }
+  lines->emplace_back(text);
+}
+
+void AddQuad(std::vector<GLfloat>* vertices, float left, float top,
+             float right, float bottom) {
+  const GLfloat quad[] = {left, top, right, top, right, bottom,
+                          left, top, right, bottom, left, bottom};
+  vertices->insert(vertices->end(), quad, quad + 12);
+}
+
+void AddText(std::vector<GLfloat>* vertices, std::string_view text, int x,
+             int y, int scale) {
+  for (std::size_t index = 0; index < text.size(); ++index) {
+    const Glyph& glyph = FindGlyph(text[index]);
+    for (int row = 0; row < 5; ++row) {
+      for (int column = 0; column < 3; ++column) {
+        if ((glyph.rows[row] & (1u << (2 - column))) == 0) continue;
+        const float left = static_cast<float>(x + index * 4 * scale +
+                                              column * scale);
+        const float top = static_cast<float>(y + row * scale);
+        AddQuad(vertices, left, top, left + scale, top + scale);
+      }
+    }
+  }
+}
+
+struct PageLayout {
+  int width = 1;
+  int height = 1;
+  int scale = 1;
+  int margin = 5;
+  int line_height = 7;
+  std::vector<std::vector<GLfloat>> pages;
+};
+
+std::vector<std::string> MakeReport() {
+  const char* version = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+  const char* renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
+  const char* vendor = reinterpret_cast<const char*>(glGetString(GL_VENDOR));
+  const char* raw_extensions =
+      reinterpret_cast<const char*>(glGetString(GL_EXTENSIONS));
+  const std::string_view extensions =
+      raw_extensions ? std::string_view(raw_extensions) : std::string_view();
+  std::vector<std::string> extension_names;
+  std::size_t start = 0;
+  while (start < extensions.size()) {
+    while (start < extensions.size() && extensions[start] == ' ') ++start;
+    if (start == extensions.size()) break;
+    std::size_t end = extensions.find(' ', start);
+    if (end == std::string_view::npos) end = extensions.size();
+    extension_names.emplace_back(extensions.substr(start, end - start));
+    start = end + 1;
+  }
+
+  std::vector<std::string> lines;
+  lines.emplace_back("GL extension probe (runtime context)");
+  lines.emplace_back(std::string("Version: ") + (version ? version : "(null)"));
+  lines.emplace_back(std::string("Renderer: ") + (renderer ? renderer : "(null)"));
+  lines.emplace_back(std::string("Vendor: ") + (vendor ? vendor : "(null)"));
+  lines.emplace_back("Extensions reported: " +
+                     std::to_string(extension_names.size()));
+  lines.emplace_back(std::string("GL_IMG_vertex_program: ") +
+                     (HasExtension(extensions, "GL_IMG_vertex_program")
+                          ? "advertised"
+                          : "not advertised"));
+  lines.emplace_back("EGL proc-address tests:");
+  lines.emplace_back(std::string("glGenProgramsARB: ") +
+                     (HasProc("glGenProgramsARB") ? "yes" : "no"));
+  lines.emplace_back(std::string("glBindProgramARB: ") +
+                     (HasProc("glBindProgramARB") ? "yes" : "no"));
+  lines.emplace_back(std::string("glProgramStringARB: ") +
+                     (HasProc("glProgramStringARB") ? "yes" : "no"));
+  lines.emplace_back(std::string("glProgramEnvParameter4fvARB: ") +
+                     (HasProc("glProgramEnvParameter4fvARB")
+                          ? "yes"
+                          : "no"));
+  lines.emplace_back(std::string("glDeleteProgramsARB: ") +
+                     (HasProc("glDeleteProgramsARB") ? "yes" : "no"));
+  lines.emplace_back("GL_OES_matrix_palette procs:");
+  lines.emplace_back(std::string("glCurrentPaletteMatrixOES: ") +
+                     (HasProc("glCurrentPaletteMatrixOES")
+                          ? "yes"
+                          : "no"));
+  lines.emplace_back(std::string("glLoadPaletteFromModelViewMatrixOES: ") +
+                     (HasProc("glLoadPaletteFromModelViewMatrixOES")
+                          ? "yes"
+                          : "no"));
+  lines.emplace_back(std::string("glMatrixIndexPointerOES: ") +
+                     (HasProc("glMatrixIndexPointerOES")
+                          ? "yes"
+                          : "no"));
+  lines.emplace_back(std::string("glWeightPointerOES: ") +
+                     (HasProc("glWeightPointerOES") ? "yes" : "no"));
+  lines.emplace_back("Runtime GL_EXTENSIONS tokens:");
+  for (const std::string& extension : extension_names) {
+    lines.push_back(extension);
+  }
+  return lines;
+}
+
+PageLayout MakePageLayout(const std::vector<std::string>& report,
+                          symbian::api::display::WindowSize size) {
+  PageLayout layout;
+  layout.width = std::max(1, size.width);
+  layout.height = std::max(1, size.height);
+  layout.scale = layout.width >= 220 ? 2 : 1;
+  layout.margin = 5 * layout.scale;
+  layout.line_height = 7 * layout.scale;
+  const std::size_t chars_per_line = static_cast<std::size_t>(
+      std::max(8, (layout.width - 2 * layout.margin) / (4 * layout.scale)));
+
+  std::vector<std::string> wrapped;
+  for (const std::string& line : report) {
+    WrapAndAppend(&wrapped, line, chars_per_line);
+  }
+  const std::size_t lines_per_page = static_cast<std::size_t>(
+      std::max(1, (layout.height - 3 * layout.margin) / layout.line_height));
+  const std::size_t page_count =
+      std::max<std::size_t>(1, (wrapped.size() + lines_per_page - 1) /
+                                  lines_per_page);
+  layout.pages.reserve(page_count);
+  for (std::size_t page = 0; page < page_count; ++page) {
+    const std::size_t first_line = page * lines_per_page;
+    const std::size_t last_line =
+        std::min(wrapped.size(), first_line + lines_per_page);
+    std::vector<GLfloat> vertices;
+    for (std::size_t line = first_line; line < last_line; ++line) {
+      AddText(&vertices, wrapped[line], layout.margin,
+              layout.margin + static_cast<int>(line - first_line) *
+                                  layout.line_height,
+              layout.scale);
+    }
+    const std::string footer = "LEFT/RIGHT OR TAP: PAGE " +
+                               std::to_string(page + 1) + "/" +
+                               std::to_string(page_count);
+    AddText(&vertices, footer, layout.margin,
+            layout.height - 2 * layout.margin, layout.scale);
+    layout.pages.push_back(std::move(vertices));
+  }
+  return layout;
+}
+
+int RunWindow(WindowSurface* window) {
+  GlesWindowContext context;
+  if (!context.Open(window, 1).ok() || !context.MakeCurrent().ok()) {
+    return KErrNotSupported;
+  }
+
+  const std::vector<std::string> report = MakeReport();
+  PageLayout layout = MakePageLayout(report, window->size());
+  bool running = true;
+  std::size_t page = 0;
+  while (running) {
+    for (int count = 0; count < 32; ++count) {
+      auto event = window->PollInput();
+      if (!event.ok()) {
+        running = false;
+        break;
+      }
+      if (!event->has_value()) break;
+      const auto& input = **event;
+      if (input.kind == WindowInputKind::kCloseRequested ||
+          (input.kind == WindowInputKind::kKeyDown &&
+           input.key == WindowKey::kEscape)) {
+        running = false;
+        break;
+      }
+      if (input.kind == WindowInputKind::kKeyDown) {
+        if (input.key == WindowKey::kRight || input.key == WindowKey::kDown ||
+            input.key == WindowKey::kEnter || input.key == WindowKey::kSelect) {
+          ++page;
+        } else if (input.key == WindowKey::kLeft ||
+                   input.key == WindowKey::kUp ||
+                   input.key == WindowKey::kBackspace) {
+          if (page > 0) --page;
+        }
+      } else if (input.kind == WindowInputKind::kPointerDown) {
+        if (input.x >= window->size().width / 2) {
+          ++page;
+        } else if (page > 0) {
+          --page;
+        }
+      } else if (input.kind == WindowInputKind::kDisplayChanged) {
+        layout = MakePageLayout(report, window->size());
+        page = 0;
+      }
+    }
+    if (!running) break;
+
+    const std::size_t page_count = layout.pages.size();
+    if (page_count == 0) break;
+    page %= page_count;
+    const int width = layout.width;
+    const int height = layout.height;
+    const std::vector<GLfloat>& vertices = layout.pages[page];
+
+    glViewport(0, 0, width, height);
+    glClearColor(0.015f, 0.025f, 0.05f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_TEXTURE_2D);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrthof(0.0f, static_cast<GLfloat>(width),
+             static_cast<GLfloat>(height), 0.0f, -1.0f, 1.0f);
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+    glColor4f(0.45f, 1.0f, 0.68f, 1.0f);
+    glEnableClientState(GL_VERTEX_ARRAY);
+    glVertexPointer(2, GL_FLOAT, 0, vertices.empty() ? nullptr : vertices.data());
+    glDrawArrays(GL_TRIANGLES, 0,
+                 static_cast<GLsizei>(vertices.size() / 2));
+    glDisableClientState(GL_VERTEX_ARRAY);
+    if (!context.Swap().ok()) break;
+    User::After(100000);
+  }
+  context.Close();
+  return KErrNone;
+}
+}  // namespace
+
+int RunApplication() {
+  WindowSurface window;
+  if (!window.Open("GLES Extension Probe").ok()) {
+    return KErrNotSupported;
+  }
+  return RunWindow(&window);
+}

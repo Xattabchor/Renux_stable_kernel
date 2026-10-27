@@ -1,0 +1,17 @@
+[project]
+architecture = "armv6"
+name = "glesextprobe"
+kind = "e32-import-experiment"
+cmake_preset = "symbian-pic"
+uid3 = 0xe0000838
+
+[package]
+uid = 0xe0000839
+name = "GLES Extension Probe"
+vendor = "Renux"
+executable_name = "glesextprobe.exe"
+version = [1, 0, 0]
+
+[application]
+caption = "GLES Extension Probe"
+short_caption = "GLES Probe"
