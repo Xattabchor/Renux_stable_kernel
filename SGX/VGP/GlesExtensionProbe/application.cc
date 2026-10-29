@@ -6,6 +6,8 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
+#include <cstring>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -80,15 +82,15 @@ class Es1WindowContext final {
 
   bool Open(WindowSurface* window) {
     if (window == nullptr || window->NativeWindowHandle() == nullptr) {
-      return false;
+      return Fail("native window", EGL_BAD_NATIVE_WINDOW);
     }
     display_ = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-    if (display_ == EGL_NO_DISPLAY) return false;
+    if (display_ == EGL_NO_DISPLAY) return Fail("eglGetDisplay", eglGetError());
+
     EGLint major = 0;
     EGLint minor = 0;
     if (!eglInitialize(display_, &major, &minor)) {
-      Close();
-      return false;
+      return Fail("eglInitialize", eglGetError());
     }
     initialized_ = true;
 
@@ -104,35 +106,50 @@ class Es1WindowContext final {
     EGLConfig config = 0;
     EGLint config_count = 0;
     if (!eglChooseConfig(display_, config_attributes, &config, 1,
-                         &config_count) || config_count == 0) {
-      Close();
-      return false;
+                         &config_count)) {
+      return Fail("eglChooseConfig", eglGetError());
     }
+    if (config_count == 0) return Fail("no RGB565 EGL config", EGL_SUCCESS);
+
     surface_ = eglCreateWindowSurface(
         display_, config,
         static_cast<EGLNativeWindowType>(window->NativeWindowHandle()),
         nullptr);
     if (surface_ == EGL_NO_SURFACE) {
-      Close();
-      return false;
+      return Fail("eglCreateWindowSurface", eglGetError());
     }
     const EGLint context_attributes[] = {EGL_NONE};
     context_ = eglCreateContext(display_, config, EGL_NO_CONTEXT,
                                 context_attributes);
-    if (context_ == EGL_NO_CONTEXT ||
-        !eglMakeCurrent(display_, surface_, surface_, context_)) {
-      Close();
-      return false;
+    if (context_ == EGL_NO_CONTEXT) {
+      return Fail("eglCreateContext", eglGetError());
+    }
+    if (!eglMakeCurrent(display_, surface_, surface_, context_)) {
+      return Fail("eglMakeCurrent", eglGetError());
     }
     return true;
   }
 
   bool Swap() {
-    return display_ != EGL_NO_DISPLAY && surface_ != EGL_NO_SURFACE &&
-           eglSwapBuffers(display_, surface_);
+    if (display_ != EGL_NO_DISPLAY && surface_ != EGL_NO_SURFACE &&
+        eglSwapBuffers(display_, surface_)) {
+      return true;
+    }
+    return Fail("eglSwapBuffers", eglGetError());
   }
 
+  const std::string& error_message() const { return error_message_; }
+
  private:
+  bool Fail(const char* stage, EGLint error) {
+    char formatted_error[16];
+    std::snprintf(formatted_error, sizeof(formatted_error), "0x%04x",
+                  static_cast<unsigned int>(error));
+    error_message_ = std::string(stage) + " failed (EGL " + formatted_error + ")";
+    Close();
+    return false;
+  }
+
   void Close() {
     if (display_ != EGL_NO_DISPLAY) {
       if (context_ != EGL_NO_CONTEXT) {
@@ -153,6 +170,7 @@ class Es1WindowContext final {
   EGLSurface surface_ = EGL_NO_SURFACE;
   EGLContext context_ = EGL_NO_CONTEXT;
   bool initialized_ = false;
+  std::string error_message_;
 };
 
 bool HasExtension(std::string_view list, std::string_view wanted) {
@@ -201,6 +219,93 @@ void AddText(std::vector<GLfloat>* vertices, std::string_view text, int x,
       }
     }
   }
+}
+
+void SetRgb565Pixel(symbian::api::display::Rgb565Frame* frame, int x, int y,
+                    std::uint16_t color) {
+  if (frame == nullptr || x < 0 || y < 0 || x >= frame->size.width ||
+      y >= frame->size.height) {
+    return;
+  }
+  const std::size_t offset = static_cast<std::size_t>(y) * frame->pitch_bytes +
+                             static_cast<std::size_t>(x) * sizeof(color);
+  std::memcpy(frame->pixels.data() + offset, &color, sizeof(color));
+}
+
+void DrawSoftwareText(symbian::api::display::Rgb565Frame* frame,
+                      std::string_view text, int x, int y, int scale,
+                      std::uint16_t color) {
+  for (std::size_t index = 0; index < text.size(); ++index) {
+    const Glyph& glyph = FindGlyph(text[index]);
+    for (int row = 0; row < 5; ++row) {
+      for (int column = 0; column < 3; ++column) {
+        if ((glyph.rows[row] & (1u << (2 - column))) == 0) continue;
+        for (int dy = 0; dy < scale; ++dy) {
+          for (int dx = 0; dx < scale; ++dx) {
+            SetRgb565Pixel(frame,
+                           x + static_cast<int>(index) * 4 * scale +
+                               column * scale + dx,
+                           y + row * scale + dy, color);
+          }
+        }
+      }
+    }
+  }
+}
+
+int ShowEglFailure(WindowSurface* window, std::string_view detail) {
+  using symbian::api::display::Rgb565Frame;
+  using symbian::api::display::WindowInputKind;
+  using symbian::api::display::WindowKey;
+  if (window == nullptr) return KErrNotSupported;
+
+  const auto draw = [&]() -> bool {
+    auto frame_result = window->CreateRgb565Frame();
+    if (!frame_result.ok()) return false;
+    Rgb565Frame frame = *frame_result;
+    for (int y = 0; y < frame.size.height; ++y) {
+      for (int x = 0; x < frame.size.width; ++x) {
+        SetRgb565Pixel(&frame, x, y, 0x0841);
+      }
+    }
+    const int scale = frame.size.width >= 220 ? 2 : 1;
+    const int margin = 6 * scale;
+    const std::size_t chars_per_line = static_cast<std::size_t>(
+        std::max(8, (frame.size.width - 2 * margin) / (4 * scale)));
+    std::vector<std::string> lines;
+    WrapAndAppend(&lines, "GLES 1.x context failed", chars_per_line);
+    WrapAndAppend(&lines, detail, chars_per_line);
+    WrapAndAppend(&lines, "Send this EGL error to the developer", chars_per_line);
+    WrapAndAppend(&lines, "Press Escape to close", chars_per_line);
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+      DrawSoftwareText(&frame, lines[index], margin,
+                       margin + static_cast<int>(index) * 7 * scale,
+                       scale, 0xffff);
+    }
+    return window->Present().ok();
+  };
+
+  if (!draw()) return KErrNotSupported;
+  bool running = true;
+  while (running) {
+    for (int count = 0; count < 32; ++count) {
+      auto event = window->PollInput();
+      if (!event.ok()) return KErrNone;
+      if (!event->has_value()) break;
+      const auto& input = **event;
+      if (input.kind == WindowInputKind::kCloseRequested ||
+          (input.kind == WindowInputKind::kKeyDown &&
+           input.key == WindowKey::kEscape)) {
+        running = false;
+        break;
+      }
+      if (input.kind == WindowInputKind::kDisplayChanged && !draw()) {
+        return KErrNone;
+      }
+    }
+    if (running) User::After(100000);
+  }
+  return KErrNone;
 }
 
 struct PageLayout {
@@ -321,7 +426,9 @@ PageLayout MakePageLayout(const std::vector<std::string>& report,
 
 int RunWindow(WindowSurface* window) {
   Es1WindowContext context;
-  if (!context.Open(window)) return KErrNotSupported;
+  if (!context.Open(window)) {
+    return ShowEglFailure(window, context.error_message());
+  }
 
   const std::vector<std::string> report = MakeReport();
   PageLayout layout = MakePageLayout(report, window->size());
