@@ -73,7 +73,8 @@
 # other file in this family. Unaffected by any of the above; they never
 # competed with the bone array or the light params for register space,
 # because they are not addressed through program.env[]/program.local[] at
-# all.
+# all. The SDK compiler rejects program.env[17]; light/fog constants use
+# local[16..40], which is outside the bone array's local[0..15] range.
 #
 # Target: VGPCompiler.exe -i<this file> -o<out> -t -target=generic
 #
@@ -108,21 +109,11 @@
 #                     tested 16-per-reference cap, see OPEN item above
 #   env[]    0..13   bone array, part 2 (14 of its own 16-per-ref cap,
 #                     only as many as 10 bones need: 30 total - 16 = 14)  14
-#   env[]       14   directional light direction (points AT the light)   1
-#   env[]       15   directional light color                             1
-#   env[]       16   ambient                                             1
-#   env[]  17..20   spot 0: pos, color, dir, fall(.x=k,.y=-outerCos*k)   4
-#   env[]  21..24   spot 1: same layout                                   4
-#   env[]  25..28   spot 2: same layout                                   4
-#   env[]  29..30   omni 0: pos, color                                    2
-#   env[]  31..32   omni 1: pos, color                                    2
-#   env[]  33..34   omni 2: pos, color                                    2
-#   env[]  35..36   omni 3: pos, color                                    2
-#   env[]  37..38   fog color, fog params (.x=-1/(end-start),
-#                    .y=end/(end-start))                                  2
-#   env[]  39..95+   unused - exact ceiling untested for FLAT usage
-#                     (only the ARL-array reference cap has been
-#                     deliberately overflowed so far)
+#   env[]    14..15  unused (SDK compiler caps env[] at 16 entries)
+#   local[] 16..18   directional direction/color + ambient               3
+#   local[] 19..30   three spots: pos, color, dir, fall                  12
+#   local[] 31..38   four omni lights: pos, color                          8
+#   local[] 39..40   fog color and parameters                              2
 #   NOTE: state.matrix.mvp / state.matrix.modelview are NOT in this
 #         table - GL matrix-stack state, not program.env[] uploads.
 #
@@ -148,24 +139,24 @@ PARAM mvp[4]       = { state.matrix.mvp };        # not env[] - see header
 PARAM modelview[4] = { state.matrix.modelview };  # not env[] - fog eye-depth only
 
 # ---- lights + fog: flat env[] reads, starting right after the bone array ----
-PARAM dDir    = program.env[14];   # directional light direction, normalized, points AT light
-PARAM dColor  = program.env[15];
-PARAM ambient = program.env[16];
+PARAM dDir    = program.local[16];   # directional light direction, normalized, points AT light
+PARAM dColor  = program.local[17];
+PARAM ambient = program.local[18];
 
-PARAM s0Pos  = program.env[17];  PARAM s0Color = program.env[18];
-PARAM s0Dir  = program.env[19];  PARAM s0Fall  = program.env[20];
-PARAM s1Pos  = program.env[21];  PARAM s1Color = program.env[22];
-PARAM s1Dir  = program.env[23];  PARAM s1Fall  = program.env[24];
-PARAM s2Pos  = program.env[25];  PARAM s2Color = program.env[26];
-PARAM s2Dir  = program.env[27];  PARAM s2Fall  = program.env[28];
+PARAM s0Pos  = program.local[19];  PARAM s0Color = program.local[20];
+PARAM s0Dir  = program.local[21];  PARAM s0Fall  = program.local[22];
+PARAM s1Pos  = program.local[23];  PARAM s1Color = program.local[24];
+PARAM s1Dir  = program.local[25];  PARAM s1Fall  = program.local[26];
+PARAM s2Pos  = program.local[27];  PARAM s2Color = program.local[28];
+PARAM s2Dir  = program.local[29];  PARAM s2Fall  = program.local[30];
 
-PARAM o0Pos  = program.env[29];  PARAM o0Color = program.env[30];
-PARAM o1Pos  = program.env[31];  PARAM o1Color = program.env[32];
-PARAM o2Pos  = program.env[33];  PARAM o2Color = program.env[34];
-PARAM o3Pos  = program.env[35];  PARAM o3Color = program.env[36];
+PARAM o0Pos  = program.local[31];  PARAM o0Color = program.local[32];
+PARAM o1Pos  = program.local[33];  PARAM o1Color = program.local[34];
+PARAM o2Pos  = program.local[35];  PARAM o2Color = program.local[36];
+PARAM o3Pos  = program.local[37];  PARAM o3Color = program.local[38];
 
-PARAM fogColor  = program.env[37];
-PARAM fogParams = program.env[38];   # .x = -1/(end-start), .y = end/(end-start)
+PARAM fogColor  = program.local[39];
+PARAM fogParams = program.local[40];   # .x = -1/(end-start), .y = end/(end-start)
 
 TEMP acc, naccum, t, tn, skinned, normal, nlen;
 TEMP eyeZ, fog, delta;
