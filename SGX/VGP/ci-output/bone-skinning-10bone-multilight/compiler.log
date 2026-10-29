@@ -3,9 +3,9 @@
 *************** Compiler Log ***************
 
 Error: Array index for Env/Local Params is out of range (17), max is 16
-Line 154:
-PARAM s0Pos  = program.env[17];  PARAM s0Color = program.env[18];
-                           ^
+Line 142:
+PARAM dColor  = program.local[17];
+                              ^
 Failed to compile.
 
 ************* End Compiler Log *************
