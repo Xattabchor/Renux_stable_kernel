@@ -2,9 +2,10 @@
 
 *************** Compiler Log ***************
 
-Found TOK_3SWIZZLE, Expected 1_SWIZZLE? (token = 409)
-Line 180:
-MUL acc.xyz, t.xyz, iWeight.x;
-              ^
+Error: Array index for Env/Local Params is out of range (17), max is 16
+Line 154:
+PARAM s0Pos  = program.env[17];  PARAM s0Color = program.env[18];
+                           ^
+Failed to compile.
 
 ************* End Compiler Log *************
