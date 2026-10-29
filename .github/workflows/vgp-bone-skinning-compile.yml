@@ -1,0 +1,48 @@
+name: Compile 10-bone multilight VGP shader
+
+on:
+  push:
+    branches:
+      - arena/0db9be99-renux-stable-kernel
+    paths:
+      - .github/workflows/vgp-bone-skinning-compile.yml
+      - SGX/VGP/bone_skinning_10bone_multilight.vp.txt
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out shader and SDK
+        uses: actions/checkout@v4
+
+      - name: Install 32-bit runtime for the SDK VGPCompiler
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y libc6-i386 lib32gcc-s1 lib32stdc++6
+
+      - name: Compile shader for generic VGP target
+        shell: bash
+        run: |
+          set -euo pipefail
+          compiler="SGX/SDK_BIN/Graphics_SDK_setuplinux_4_03_00_02/GFX_Linux_SDK/OGLES/SDKPackage/Utilities/VGPCompiler/Linux/VGPCompiler"
+          input="SGX/VGP/bone_skinning_10bone_multilight.vp.txt"
+          output="$RUNNER_TEMP/bone_skinning_10bone_multilight"
+          "$compiler" -i"$input" -o"$output" -target=generic 2>&1 | tee "$RUNNER_TEMP/vgp-compiler.log"
+          test -s "$output.bin"
+          test -s "$output.h"
+          echo "VGP_OUTPUT_BASE=$output" >> "$GITHUB_ENV"
+
+      - name: Upload compiled shader and compiler log
+        uses: actions/upload-artifact@v4
+        with:
+          name: bone-skinning-10bone-multilight-vgp
+          path: |
+            ${{ runner.temp }}/bone_skinning_10bone_multilight.bin
+            ${{ runner.temp }}/bone_skinning_10bone_multilight.h
+            ${{ runner.temp }}/vgp-compiler.log
+          if-no-files-found: error
+          retention-days: 30
