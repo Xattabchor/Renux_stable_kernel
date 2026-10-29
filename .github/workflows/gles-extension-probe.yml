@@ -64,8 +64,8 @@ jobs:
             ${{ runner.temp }}/gles-extension-probe-sis/package-report.json
           if-no-files-found: error
           retention-days: 30
-      - name: Save build diagnostics to branch for inspection
-        if: always()
+      - name: Save failed build diagnostics to branch for inspection
+        if: always() && steps.build.outputs.succeeded != 'true'
         shell: bash
         run: |
           set -euo pipefail
