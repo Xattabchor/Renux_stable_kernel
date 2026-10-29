@@ -7,7 +7,7 @@ on:
       - ".github/workflows/gles-extension-probe.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -35,14 +35,27 @@ jobs:
           cp -a SGX/VGP/GlesExtensionProbe/. "$project/"
           echo "SYMBIAN_PROJECT=$project" >> "$GITHUB_ENV"
       - name: Build ARMv6 E32 executable
-        run: symbian app build --project "$SYMBIAN_PROJECT"
+        id: build
+        shell: bash
+        run: |
+          set +e
+          log="$RUNNER_TEMP/glesextprobe-build.log"
+          symbian app build --project "$SYMBIAN_PROJECT" >"$log" 2>&1
+          status=$?
+          cat "$log"
+          echo "succeeded=$([[ $status -eq 0 ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          mkdir -p SGX/VGP/ci-output/GlesExtensionProbe
+          cp "$log" SGX/VGP/ci-output/GlesExtensionProbe/build.log
+          exit 0
       - name: Package SIS
+        if: steps.build.outputs.succeeded == 'true'
         run: >-
           symbian package
           --project "$SYMBIAN_PROJECT"
           --artifact "$SYMBIAN_PROJECT/.symbian/build/glesextprobe.exe"
           --output "$RUNNER_TEMP/gles-extension-probe-sis"
       - name: Upload SIS and package report
+        if: steps.build.outputs.succeeded == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: Symbian-GLES-Extension-Probe-SIS
@@ -51,3 +64,18 @@ jobs:
             ${{ runner.temp }}/gles-extension-probe-sis/package-report.json
           if-no-files-found: error
           retention-days: 30
+      - name: Save build diagnostics to branch for inspection
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f SGX/VGP/ci-output/GlesExtensionProbe/build.log
+          if ! git diff --cached --quiet; then
+            git commit -m 'Record GLES extension probe build diagnostics'
+            git push origin "$GITHUB_REF_NAME"
+          fi
+      - name: Require successful ARMv6 build
+        if: always()
+        run: test "${{ steps.build.outputs.succeeded }}" = true
