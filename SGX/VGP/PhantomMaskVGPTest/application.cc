@@ -11,6 +11,7 @@
 #include <cstring>
 #include <cstdio>
 #include <string>
+#include <string_view>
 
 #include "symbian/api/display/window_surface.h"
 #include "symbian/api/time/monotonic_clock.h"
@@ -320,6 +321,106 @@ bool HasExtension(const char* extension_list, const char* wanted) {
     cursor += wanted_length;
   }
   return false;
+}
+
+struct StatusGlyph {
+  char character;
+  std::uint8_t rows[5];
+};
+
+constexpr StatusGlyph kStatusGlyphs[] = {
+    {' ', {0, 0, 0, 0, 0}}, {'A', {2, 5, 7, 5, 5}}, {'B', {6, 5, 6, 5, 6}},
+    {'C', {3, 4, 4, 4, 3}}, {'D', {6, 5, 5, 5, 6}}, {'E', {7, 4, 6, 4, 7}},
+    {'F', {7, 4, 6, 4, 4}}, {'G', {3, 4, 5, 5, 3}}, {'H', {5, 5, 7, 5, 5}},
+    {'I', {7, 2, 2, 2, 7}}, {'J', {1, 1, 1, 5, 2}}, {'K', {5, 5, 6, 5, 5}},
+    {'L', {4, 4, 4, 4, 7}}, {'M', {5, 7, 7, 5, 5}}, {'N', {5, 7, 7, 7, 5}},
+    {'O', {2, 5, 5, 5, 2}}, {'P', {6, 5, 6, 4, 4}}, {'Q', {2, 5, 5, 7, 3}},
+    {'R', {6, 5, 6, 5, 5}}, {'S', {3, 4, 2, 1, 6}}, {'T', {7, 2, 2, 2, 2}},
+    {'U', {5, 5, 5, 5, 7}}, {'V', {5, 5, 5, 5, 2}}, {'W', {5, 5, 7, 7, 5}},
+    {'X', {5, 5, 2, 5, 5}}, {'Y', {5, 5, 2, 2, 2}}, {'Z', {7, 1, 2, 4, 7}},
+};
+
+const StatusGlyph& FindStatusGlyph(char character) {
+  for (const StatusGlyph& glyph : kStatusGlyphs) {
+    if (glyph.character == character) return glyph;
+  }
+  return kStatusGlyphs[0];
+}
+
+void SetStatusPixel(symbian::api::display::Rgb565Frame* frame, int x, int y,
+                    std::uint16_t color) {
+  if (frame == nullptr || x < 0 || y < 0 || x >= frame->size.width ||
+      y >= frame->size.height) {
+    return;
+  }
+  const std::size_t offset = static_cast<std::size_t>(y) * frame->pitch_bytes +
+                             static_cast<std::size_t>(x) * sizeof(color);
+  std::memcpy(frame->pixels.data() + offset, &color, sizeof(color));
+}
+
+void DrawStatusText(symbian::api::display::Rgb565Frame* frame,
+                    std::string_view text, int x, int y, int scale,
+                    std::uint16_t color) {
+  for (std::size_t index = 0; index < text.size(); ++index) {
+    const StatusGlyph& glyph = FindStatusGlyph(text[index]);
+    for (int row = 0; row < 5; ++row) {
+      for (int column = 0; column < 3; ++column) {
+        if ((glyph.rows[row] & (1u << (2 - column))) == 0) continue;
+        for (int dy = 0; dy < scale; ++dy) {
+          for (int dx = 0; dx < scale; ++dx) {
+            SetStatusPixel(frame,
+                           x + static_cast<int>(index) * 4 * scale +
+                               column * scale + dx,
+                           y + row * scale + dy, color);
+          }
+        }
+      }
+    }
+  }
+}
+
+bool DrawVgpStatus(WindowSurface* window, std::string_view status) {
+  auto frame_result = window->CreateRgb565Frame();
+  if (!frame_result.ok()) return false;
+  auto frame = *frame_result;
+  for (int y = 0; y < frame.size.height; ++y) {
+    for (int x = 0; x < frame.size.width; ++x) {
+      SetStatusPixel(&frame, x, y, 0x0841);
+    }
+  }
+  const int scale = frame.size.width >= 220 ? 2 : 1;
+  const int lines_height = 4 * 7 * scale;
+  const int first_y = std::max(4, (frame.size.height - lines_height) / 2);
+  const auto draw_centered = [&](std::string_view text, int y,
+                                 std::uint16_t color) {
+    const int text_width = static_cast<int>(text.size()) * 4 * scale - scale;
+    const int x = std::max(2, (frame.size.width - text_width) / 2);
+    DrawStatusText(&frame, text, x, y, scale, color);
+  };
+  draw_centered("VERTEX PROGRAM", first_y, 0xffff);
+  draw_centered(status, first_y + 7 * scale, 0xffe0);
+  draw_centered("USING FIXED LIGHTING", first_y + 14 * scale, 0xffff);
+  draw_centered("PRESS ANY KEY", first_y + 21 * scale, 0x07ff);
+  return window->Present().ok();
+}
+
+bool ShowVgpStatus(WindowSurface* window, std::string_view status) {
+  if (!DrawVgpStatus(window, status)) return true;
+  while (true) {
+    for (int count = 0; count < 32; ++count) {
+      auto event = window->PollInput();
+      if (!event.ok()) return true;
+      if (!event->has_value()) break;
+      const auto& input = **event;
+      if (input.kind == WindowInputKind::kCloseRequested) return false;
+      if (input.kind == WindowInputKind::kKeyDown) return true;
+      if (input.kind == WindowInputKind::kDisplayChanged &&
+          !DrawVgpStatus(window, status)) {
+        return true;
+      }
+    }
+    User::After(50000);
+  }
 }
 
 std::size_t AssetByteCount(const std::uint8_t* begin,
@@ -643,11 +744,12 @@ void DrawPhantomMask(const SymbianGlesApi& gl, const float* camera,
 }
 
 bool InitializeVgp(const SymbianGlesApi& gl, const VgpApi& api,
-                   GLuint* program) {
+                   GLuint* program, std::string* status) {
   const auto* extensions =
       reinterpret_cast<const char*>(gl.glGetString_fn(GL_EXTENSIONS));
   if (!HasExtension(extensions, "GL_IMG_vertex_program") || !api.gen ||
       !api.bind || !api.load || !api.set_env || !api.remove) {
+    if (status) *status = "NOT SUPPORTED";
     return false;
   }
   api.gen(1, program);
@@ -659,6 +761,7 @@ bool InitializeVgp(const SymbianGlesApi& gl, const VgpApi& api,
   if (gl.glGetError_fn() != GL_NO_ERROR) {
     api.remove(1, program);
     *program = 0;
+    if (status) *status = "LOAD FAILED";
     return false;
   }
   const ShCoefficients sh = BuildShCoefficients();
@@ -666,8 +769,10 @@ bool InitializeVgp(const SymbianGlesApi& gl, const VgpApi& api,
   if (gl.glGetError_fn() != GL_NO_ERROR) {
     api.remove(1, program);
     *program = 0;
+    if (status) *status = "PARAMETER ERROR";
     return false;
   }
+  if (status) status->clear();
   return true;
 }
 
@@ -698,7 +803,13 @@ int RunWindow(WindowSurface* window) {
 
   const VgpApi api = LoadVgpApi(gl);
   GLuint program = 0;
-  const bool vgp_active = InitializeVgp(gl, api, &program);
+  std::string vgp_status;
+  const bool vgp_active = InitializeVgp(gl, api, &program, &vgp_status);
+  if (!vgp_active && !ShowVgpStatus(window, vgp_status)) {
+    gl.glDeleteTextures_fn(1, &mask_texture);
+    gl.glDeleteTextures_fn(1, &room_texture);
+    return KErrNone;
+  }
   gl.glClearColor_fn(0.0f, 0.0f, 0.0f, 1.0f);
   const std::int64_t start_ns =
       symbian::api::time::MonotonicClock::NowNanoseconds();
