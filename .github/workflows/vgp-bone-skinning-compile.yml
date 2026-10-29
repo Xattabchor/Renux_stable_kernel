@@ -9,7 +9,7 @@ on:
       - SGX/VGP/bone_skinning_10bone_multilight.vp.txt
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   compile:
@@ -27,21 +27,27 @@ jobs:
       - name: Compile shader for generic VGP target
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
           compiler="SGX/SDK_BIN/Graphics_SDK_setuplinux_4_03_00_02/GFX_Linux_SDK/OGLES/SDKPackage/Utilities/VGPCompiler/Linux/VGPCompiler"
           input="SGX/VGP/bone_skinning_10bone_multilight.vp.txt"
           output="$RUNNER_TEMP/bone_skinning_10bone_multilight"
           log="$RUNNER_TEMP/vgp-compiler.log"
-          if ! "$compiler" -i"$input" -o"$output" -target=generic 2>&1 | tee "$log"; then
-            echo "::group::VGPCompiler diagnostics"
-            while IFS= read -r line; do echo "::error::$line"; done < "$log"
-            echo "::endgroup::"
-            exit 1
+          "$compiler" -i"$input" -o"$output" -target=generic >"$log" 2>&1
+          status=$?
+          cat "$log"
+          if [[ $status -eq 0 && ( ! -s "$output.bin" || ! -s "$output.h" ) ]]; then
+            echo "Compiler exited successfully but did not create both .bin and .h outputs."
+            status=1
           fi
-          test -s "$output.bin"
-          test -s "$output.h"
+          echo "VGP_COMPILE_STATUS=$status" >> "$GITHUB_ENV"
+          {
+            echo "### VGPCompiler exit status: $status"
+            echo '```text'
+            cat "$log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload compiled shader and compiler log
+      - name: Upload compiler log and generated files
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -52,3 +58,28 @@ jobs:
             ${{ runner.temp }}/vgp-compiler.log
           if-no-files-found: warn
           retention-days: 30
+
+      - name: Commit compiler log and outputs to the branch
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          output_dir="SGX/VGP/ci-output/bone-skinning-10bone-multilight"
+          mkdir -p "$output_dir"
+          cp "$RUNNER_TEMP/vgp-compiler.log" "$output_dir/compiler.log"
+          for ext in bin h; do
+            if test -f "$RUNNER_TEMP/bone_skinning_10bone_multilight.$ext"; then
+              cp "$RUNNER_TEMP/bone_skinning_10bone_multilight.$ext" "$output_dir/shader.$ext"
+            fi
+          done
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f "$output_dir"
+          if ! git diff --cached --quiet; then
+            git commit -m 'Record 10-bone multilight VGP compile results'
+            git push origin "$GITHUB_REF_NAME"
+          fi
+
+      - name: Require successful shader compilation
+        if: always()
+        run: test "${VGP_COMPILE_STATUS:-1}" = 0
