@@ -31,12 +31,18 @@ jobs:
           compiler="SGX/SDK_BIN/Graphics_SDK_setuplinux_4_03_00_02/GFX_Linux_SDK/OGLES/SDKPackage/Utilities/VGPCompiler/Linux/VGPCompiler"
           input="SGX/VGP/bone_skinning_10bone_multilight.vp.txt"
           output="$RUNNER_TEMP/bone_skinning_10bone_multilight"
-          "$compiler" -i"$input" -o"$output" -target=generic 2>&1 | tee "$RUNNER_TEMP/vgp-compiler.log"
+          log="$RUNNER_TEMP/vgp-compiler.log"
+          if ! "$compiler" -i"$input" -o"$output" -target=generic 2>&1 | tee "$log"; then
+            echo "::group::VGPCompiler diagnostics"
+            while IFS= read -r line; do echo "::error::$line"; done < "$log"
+            echo "::endgroup::"
+            exit 1
+          fi
           test -s "$output.bin"
           test -s "$output.h"
-          echo "VGP_OUTPUT_BASE=$output" >> "$GITHUB_ENV"
 
       - name: Upload compiled shader and compiler log
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: bone-skinning-10bone-multilight-vgp
@@ -44,5 +50,5 @@ jobs:
             ${{ runner.temp }}/bone_skinning_10bone_multilight.bin
             ${{ runner.temp }}/bone_skinning_10bone_multilight.h
             ${{ runner.temp }}/vgp-compiler.log
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 30
