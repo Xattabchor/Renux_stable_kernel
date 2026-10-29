@@ -178,52 +178,52 @@ ARL A0.x, iIndex.x;
 DP4 t.x,  bone[A0.x + 0], iPos;
 DP4 t.y,  bone[A0.x + 1], iPos;
 DP4 t.z,  bone[A0.x + 2], iPos;
-MUL acc.xyz, t.xyz, iWeight.x;
+MUL acc.xyz, t, iWeight.x;
 DP3 tn.x, bone[A0.x + 0], iNormal;
 DP3 tn.y, bone[A0.x + 1], iNormal;
 DP3 tn.z, bone[A0.x + 2], iNormal;
-MUL naccum.xyz, tn.xyz, iWeight.x;
+MUL naccum.xyz, tn, iWeight.x;
 
 # ---- influence 1 ----
 ARL A0.x, iIndex.y;
 DP4 t.x,  bone[A0.x + 0], iPos;
 DP4 t.y,  bone[A0.x + 1], iPos;
 DP4 t.z,  bone[A0.x + 2], iPos;
-MAD acc.xyz, t.xyz, iWeight.y, acc.xyz;
+MAD acc.xyz, t, iWeight.y, acc;
 DP3 tn.x, bone[A0.x + 0], iNormal;
 DP3 tn.y, bone[A0.x + 1], iNormal;
 DP3 tn.z, bone[A0.x + 2], iNormal;
-MAD naccum.xyz, tn.xyz, iWeight.y, naccum.xyz;
+MAD naccum.xyz, tn, iWeight.y, naccum;
 
 # ---- influence 2 ----
 ARL A0.x, iIndex.z;
 DP4 t.x,  bone[A0.x + 0], iPos;
 DP4 t.y,  bone[A0.x + 1], iPos;
 DP4 t.z,  bone[A0.x + 2], iPos;
-MAD acc.xyz, t.xyz, iWeight.z, acc.xyz;
+MAD acc.xyz, t, iWeight.z, acc;
 DP3 tn.x, bone[A0.x + 0], iNormal;
 DP3 tn.y, bone[A0.x + 1], iNormal;
 DP3 tn.z, bone[A0.x + 2], iNormal;
-MAD naccum.xyz, tn.xyz, iWeight.z, naccum.xyz;
+MAD naccum.xyz, tn, iWeight.z, naccum;
 
 # ---- influence 3 ----
 ARL A0.x, iIndex.w;
 DP4 t.x,  bone[A0.x + 0], iPos;
 DP4 t.y,  bone[A0.x + 1], iPos;
 DP4 t.z,  bone[A0.x + 2], iPos;
-MAD acc.xyz, t.xyz, iWeight.w, acc.xyz;
+MAD acc.xyz, t, iWeight.w, acc;
 DP3 tn.x, bone[A0.x + 0], iNormal;
 DP3 tn.y, bone[A0.x + 1], iNormal;
 DP3 tn.z, bone[A0.x + 2], iNormal;
-MAD naccum.xyz, tn.xyz, iWeight.w, naccum.xyz;
+MAD naccum.xyz, tn, iWeight.w, naccum;
 
-MOV skinned.xyz, acc.xyz;
+MOV skinned.xyz, acc;
 MOV skinned.w, iPos.w;
 
 # ---- re-normalize the blended normal ----
 DP3 nlen.x, naccum, naccum;
 RSQ nlen.x, nlen.x;
-MUL normal.xyz, naccum.xyz, nlen.x;
+MUL normal.xyz, naccum, nlen.x;
 
 # ---- clip-space position ----
 DP4 result.position.x, mvp[0], skinned;
@@ -244,112 +244,112 @@ MIN fog.x, fog.x, 1.0;
 # ============================================================================
 
 # ---- ambient ----
-MOV lit.xyz, ambient.xyz;
+MOV lit.xyz, ambient;
 
 # ---- directional (3 instr) ----
 DP3 ndotl.x, normal, dDir;
 MAX ndotl.x, ndotl.x, 0.0;
-MAD lit.xyz, dColor.xyz, ndotl.x, lit.xyz;
+MAD lit.xyz, dColor, ndotl.x, lit;
 
 # ---- spot 0 (14 instr) ----
-SUB lvec.xyz, s0Pos.xyz, skinned.xyz;
+SUB lvec.xyz, s0Pos, skinned;
 DP3 distSq.x, lvec, lvec;
 RSQ distSq.x, distSq.x;                    # now holds 1/distance
-MUL ldir.xyz, lvec.xyz, distSq.x;
+MUL ldir.xyz, lvec, distSq.x;
 DP3 ndotl.x, normal, ldir;
 MAX ndotl.x, ndotl.x, 0.0;
-DP3 spotfac.x, -ldir, s0Dir.xyz;
+DP3 spotfac.x, -ldir, s0Dir;
 MAD spotfac.x, spotfac.x, s0Fall.x, s0Fall.y;
 MAX spotfac.x, spotfac.x, 0.0;
 MIN spotfac.x, spotfac.x, 1.0;
 MUL atten.x, distSq.x, distSq.x;           # (1/distance)^2 = inverse-square
 MUL ndotl.x, ndotl.x, atten.x;
 MUL ndotl.x, ndotl.x, spotfac.x;
-MAD lit.xyz, s0Color.xyz, ndotl.x, lit.xyz;
+MAD lit.xyz, s0Color, ndotl.x, lit;
 
 # ---- spot 1 (14 instr) ----
-SUB lvec.xyz, s1Pos.xyz, skinned.xyz;
+SUB lvec.xyz, s1Pos, skinned;
 DP3 distSq.x, lvec, lvec;
 RSQ distSq.x, distSq.x;
-MUL ldir.xyz, lvec.xyz, distSq.x;
+MUL ldir.xyz, lvec, distSq.x;
 DP3 ndotl.x, normal, ldir;
 MAX ndotl.x, ndotl.x, 0.0;
-DP3 spotfac.x, -ldir, s1Dir.xyz;
+DP3 spotfac.x, -ldir, s1Dir;
 MAD spotfac.x, spotfac.x, s1Fall.x, s1Fall.y;
 MAX spotfac.x, spotfac.x, 0.0;
 MIN spotfac.x, spotfac.x, 1.0;
 MUL atten.x, distSq.x, distSq.x;
 MUL ndotl.x, ndotl.x, atten.x;
 MUL ndotl.x, ndotl.x, spotfac.x;
-MAD lit.xyz, s1Color.xyz, ndotl.x, lit.xyz;
+MAD lit.xyz, s1Color, ndotl.x, lit;
 
 # ---- spot 2 (14 instr) ----
-SUB lvec.xyz, s2Pos.xyz, skinned.xyz;
+SUB lvec.xyz, s2Pos, skinned;
 DP3 distSq.x, lvec, lvec;
 RSQ distSq.x, distSq.x;
-MUL ldir.xyz, lvec.xyz, distSq.x;
+MUL ldir.xyz, lvec, distSq.x;
 DP3 ndotl.x, normal, ldir;
 MAX ndotl.x, ndotl.x, 0.0;
-DP3 spotfac.x, -ldir, s2Dir.xyz;
+DP3 spotfac.x, -ldir, s2Dir;
 MAD spotfac.x, spotfac.x, s2Fall.x, s2Fall.y;
 MAX spotfac.x, spotfac.x, 0.0;
 MIN spotfac.x, spotfac.x, 1.0;
 MUL atten.x, distSq.x, distSq.x;
 MUL ndotl.x, ndotl.x, atten.x;
 MUL ndotl.x, ndotl.x, spotfac.x;
-MAD lit.xyz, s2Color.xyz, ndotl.x, lit.xyz;
+MAD lit.xyz, s2Color, ndotl.x, lit;
 
 # ---- omni 0 (9 instr) ----
-SUB lvec.xyz, o0Pos.xyz, skinned.xyz;
+SUB lvec.xyz, o0Pos, skinned;
 DP3 distSq.x, lvec, lvec;
 RSQ distSq.x, distSq.x;
-MUL ldir.xyz, lvec.xyz, distSq.x;
+MUL ldir.xyz, lvec, distSq.x;
 DP3 ndotl.x, normal, ldir;
 MAX ndotl.x, ndotl.x, 0.0;
 MUL atten.x, distSq.x, distSq.x;
 MUL ndotl.x, ndotl.x, atten.x;
-MAD lit.xyz, o0Color.xyz, ndotl.x, lit.xyz;
+MAD lit.xyz, o0Color, ndotl.x, lit;
 
 # ---- omni 1 (9 instr) ----
-SUB lvec.xyz, o1Pos.xyz, skinned.xyz;
+SUB lvec.xyz, o1Pos, skinned;
 DP3 distSq.x, lvec, lvec;
 RSQ distSq.x, distSq.x;
-MUL ldir.xyz, lvec.xyz, distSq.x;
+MUL ldir.xyz, lvec, distSq.x;
 DP3 ndotl.x, normal, ldir;
 MAX ndotl.x, ndotl.x, 0.0;
 MUL atten.x, distSq.x, distSq.x;
 MUL ndotl.x, ndotl.x, atten.x;
-MAD lit.xyz, o1Color.xyz, ndotl.x, lit.xyz;
+MAD lit.xyz, o1Color, ndotl.x, lit;
 
 # ---- omni 2 (9 instr) ----
-SUB lvec.xyz, o2Pos.xyz, skinned.xyz;
+SUB lvec.xyz, o2Pos, skinned;
 DP3 distSq.x, lvec, lvec;
 RSQ distSq.x, distSq.x;
-MUL ldir.xyz, lvec.xyz, distSq.x;
+MUL ldir.xyz, lvec, distSq.x;
 DP3 ndotl.x, normal, ldir;
 MAX ndotl.x, ndotl.x, 0.0;
 MUL atten.x, distSq.x, distSq.x;
 MUL ndotl.x, ndotl.x, atten.x;
-MAD lit.xyz, o2Color.xyz, ndotl.x, lit.xyz;
+MAD lit.xyz, o2Color, ndotl.x, lit;
 
 # ---- omni 3 (9 instr) ----
-SUB lvec.xyz, o3Pos.xyz, skinned.xyz;
+SUB lvec.xyz, o3Pos, skinned;
 DP3 distSq.x, lvec, lvec;
 RSQ distSq.x, distSq.x;
-MUL ldir.xyz, lvec.xyz, distSq.x;
+MUL ldir.xyz, lvec, distSq.x;
 DP3 ndotl.x, normal, ldir;
 MAX ndotl.x, ndotl.x, 0.0;
 MUL atten.x, distSq.x, distSq.x;
 MUL ndotl.x, ndotl.x, atten.x;
-MAD lit.xyz, o3Color.xyz, ndotl.x, lit.xyz;
+MAD lit.xyz, o3Color, ndotl.x, lit;
 
 # ---- clamp: 8 summed lights clip past 1.0 far more easily than a single
 #      light ever did - cheap, worth it ----
-MIN lit.xyz, lit.xyz, 1.0;
+MIN lit.xyz, lit, 1.0;
 
 # ---- blend lit color with fog color by the fog factor ----
-SUB delta.xyz, lit.xyz, fogColor.xyz;
-MAD result.color.xyz, fog.x, delta.xyz, fogColor.xyz;
+SUB delta.xyz, lit, fogColor;
+MAD result.color.xyz, fog.x, delta, fogColor;
 MOV result.color.w, 1.0;
 
 # ---- texture coordinate passthrough ----
