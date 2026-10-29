@@ -8,8 +8,6 @@ symbian_add_executable(glesextprobe
   application.cc)
 target_link_libraries(glesextprobe PRIVATE
   Symbian::GlesDisplay
-  Symbian::GLES1
-  Symbian::EGL
   Symbian::WindowServer
   Symbian::Gdi
   Symbian::Math

@@ -65,14 +65,140 @@ const Glyph& FindGlyph(char character) {
   return kGlyphs[0];
 }
 
-bool HasProc(const char* name) {
-  return eglGetProcAddress(name) != nullptr;
+// Symbian 9.x phones such as the N95 expose the combined GLES 1.1/EGL
+// implementation from libGLES_CM.dll. Keep these calls dynamically resolved:
+// linking the newer SDK's separate libegl.dll/libglesv1_cm.dll imports prevents
+// the legacy phone's loader from starting the app at all.
+class SymbianGlesApi final {
+ public:
+  using EglGetDisplayFn = decltype(&eglGetDisplay);
+  using EglGetErrorFn = decltype(&eglGetError);
+  using EglGetProcAddressFn = decltype(&eglGetProcAddress);
+  using EglInitializeFn = decltype(&eglInitialize);
+  using EglChooseConfigFn = decltype(&eglChooseConfig);
+  using EglCreateWindowSurfaceFn = decltype(&eglCreateWindowSurface);
+  using EglCreateContextFn = decltype(&eglCreateContext);
+  using EglMakeCurrentFn = decltype(&eglMakeCurrent);
+  using EglSwapBuffersFn = decltype(&eglSwapBuffers);
+  using EglDestroyContextFn = decltype(&eglDestroyContext);
+  using EglDestroySurfaceFn = decltype(&eglDestroySurface);
+  using EglTerminateFn = decltype(&eglTerminate);
+  using GlGetStringFn = decltype(&glGetString);
+  using GlViewportFn = decltype(&glViewport);
+  using GlClearColorFn = decltype(&glClearColor);
+  using GlClearFn = decltype(&glClear);
+  using GlDisableFn = decltype(&glDisable);
+  using GlMatrixModeFn = decltype(&glMatrixMode);
+  using GlLoadIdentityFn = decltype(&glLoadIdentity);
+  using GlOrthofFn = decltype(&glOrthof);
+  using GlColor4fFn = decltype(&glColor4f);
+  using GlEnableClientStateFn = decltype(&glEnableClientState);
+  using GlVertexPointerFn = decltype(&glVertexPointer);
+  using GlDrawArraysFn = decltype(&glDrawArrays);
+  using GlDisableClientStateFn = decltype(&glDisableClientState);
+
+  SymbianGlesApi() = default;
+  SymbianGlesApi(const SymbianGlesApi&) = delete;
+  SymbianGlesApi& operator=(const SymbianGlesApi&) = delete;
+  ~SymbianGlesApi() { Close(); }
+
+  bool Load() {
+    const TInt result = library_.Load(_L("libGLES_CM.dll"));
+    if (result != KErrNone) {
+      error_message_ = "RLibrary.Load(libGLES_CM.dll) failed (" +
+                       std::to_string(result) + ")";
+      return false;
+    }
+    loaded_ = true;
+    // Ordinals are the Symbian GLES 1.1 Common ABI: the legacy driver exports
+    // EGL first, followed by GLES. Resolve only the entry points this probe uses.
+    return LoadFunction(&egl_choose_config, 1, "eglChooseConfig") &&
+           LoadFunction(&egl_create_context, 3, "eglCreateContext") &&
+           LoadFunction(&egl_create_window_surface, 6,
+                        "eglCreateWindowSurface") &&
+           LoadFunction(&egl_destroy_context, 7, "eglDestroyContext") &&
+           LoadFunction(&egl_destroy_surface, 8, "eglDestroySurface") &&
+           LoadFunction(&egl_get_display, 15, "eglGetDisplay") &&
+           LoadFunction(&egl_get_error, 16, "eglGetError") &&
+           LoadFunction(&egl_get_proc_address, 17, "eglGetProcAddress") &&
+           LoadFunction(&egl_initialize, 18, "eglInitialize") &&
+           LoadFunction(&egl_make_current, 19, "eglMakeCurrent") &&
+           LoadFunction(&egl_swap_buffers, 24, "eglSwapBuffers") &&
+           LoadFunction(&egl_terminate, 25, "eglTerminate") &&
+           LoadFunction(&gl_clear, 62, "glClear") &&
+           LoadFunction(&gl_clear_color, 63, "glClearColor") &&
+           LoadFunction(&gl_color4f, 69, "glColor4f") &&
+           LoadFunction(&gl_disable, 83, "glDisable") &&
+           LoadFunction(&gl_disable_client_state, 84,
+                        "glDisableClientState") &&
+           LoadFunction(&gl_draw_arrays, 85, "glDrawArrays") &&
+           LoadFunction(&gl_enable_client_state, 88,
+                        "glEnableClientState") &&
+           LoadFunction(&gl_get_string, 101, "glGetString") &&
+           LoadFunction(&gl_load_identity, 113, "glLoadIdentity") &&
+           LoadFunction(&gl_matrix_mode, 121, "glMatrixMode") &&
+           LoadFunction(&gl_orthof, 129, "glOrthof") &&
+           LoadFunction(&gl_vertex_pointer, 162, "glVertexPointer") &&
+           LoadFunction(&gl_viewport, 163, "glViewport");
+  }
+
+  void Close() {
+    if (loaded_) library_.Close();
+    loaded_ = false;
+  }
+
+  const std::string& error_message() const { return error_message_; }
+
+  EGLDisplay (EGLAPIENTRY *egl_get_display)(EGLNativeDisplayType) = nullptr;
+  EglGetErrorFn egl_get_error = nullptr;
+  EglGetProcAddressFn egl_get_proc_address = nullptr;
+  EglInitializeFn egl_initialize = nullptr;
+  EglChooseConfigFn egl_choose_config = nullptr;
+  EglCreateWindowSurfaceFn egl_create_window_surface = nullptr;
+  EglCreateContextFn egl_create_context = nullptr;
+  EglMakeCurrentFn egl_make_current = nullptr;
+  EglSwapBuffersFn egl_swap_buffers = nullptr;
+  EglDestroyContextFn egl_destroy_context = nullptr;
+  EglDestroySurfaceFn egl_destroy_surface = nullptr;
+  EglTerminateFn egl_terminate = nullptr;
+  GlGetStringFn gl_get_string = nullptr;
+  GlViewportFn gl_viewport = nullptr;
+  GlClearColorFn gl_clear_color = nullptr;
+  GlClearFn gl_clear = nullptr;
+  GlDisableFn gl_disable = nullptr;
+  GlMatrixModeFn gl_matrix_mode = nullptr;
+  GlLoadIdentityFn gl_load_identity = nullptr;
+  GlOrthofFn gl_orthof = nullptr;
+  GlColor4fFn gl_color4f = nullptr;
+  GlEnableClientStateFn gl_enable_client_state = nullptr;
+  GlVertexPointerFn gl_vertex_pointer = nullptr;
+  GlDrawArraysFn gl_draw_arrays = nullptr;
+  GlDisableClientStateFn gl_disable_client_state = nullptr;
+
+ private:
+  template <typename Function>
+  bool LoadFunction(Function* output, TInt ordinal, const char* name) {
+    const TLibraryFunction address = library_.Lookup(ordinal);
+    if (address == nullptr) {
+      error_message_ = std::string("libGLES_CM.dll missing ") + name +
+                       " at ordinal " + std::to_string(ordinal);
+      Close();
+      return false;
+    }
+    *output = reinterpret_cast<Function>(address);
+    return true;
+  }
+
+  RLibrary library_;
+  bool loaded_ = false;
+  std::string error_message_;
+};
+
+bool HasProc(const SymbianGlesApi& api, const char* name) {
+  return api.egl_get_proc_address != nullptr &&
+         api.egl_get_proc_address(name) != nullptr;
 }
 
-// The SDK's GlesWindowContext deliberately creates only OpenGL ES 2 contexts.
-// This probe targets Symbian handsets such as the Nokia N95, whose PowerVR
-// MBX driver exposes OpenGL ES 1.1. Use the EGL 1.x-compatible ES1 path
-// directly: no EGL 1.2 eglBindAPI or ES2-only config/context attributes.
 class Es1WindowContext final {
  public:
   Es1WindowContext() = default;
@@ -81,64 +207,67 @@ class Es1WindowContext final {
   ~Es1WindowContext() { Close(); }
 
   bool Open(WindowSurface* window) {
+    if (!api_.Load()) {
+      error_message_ = api_.error_message();
+      return false;
+    }
     if (window == nullptr || window->NativeWindowHandle() == nullptr) {
       return Fail("native window", EGL_BAD_NATIVE_WINDOW);
     }
-    display_ = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-    if (display_ == EGL_NO_DISPLAY) return Fail("eglGetDisplay", eglGetError());
+    display_ = api_.egl_get_display(EGL_DEFAULT_DISPLAY);
+    if (display_ == EGL_NO_DISPLAY) {
+      return Fail("eglGetDisplay", api_.egl_get_error());
+    }
 
     EGLint major = 0;
     EGLint minor = 0;
-    if (!eglInitialize(display_, &major, &minor)) {
-      return Fail("eglInitialize", eglGetError());
+    if (!api_.egl_initialize(display_, &major, &minor)) {
+      return Fail("eglInitialize", api_.egl_get_error());
     }
     initialized_ = true;
 
-    // EGL_RENDERABLE_TYPE and eglBindAPI are EGL 1.2 additions. The N95's
-    // legacy EGL 1.x implementation is ES-only, so request just a window
-    // surface with RGB565 and let eglCreateContext select its native ES API.
+    // Match Quake III's Symbian path: N95 uses a 16-bit screen and needs a
+    // 16-bit depth buffer. EGL 1.1 ignores the later renderable-type attribute.
     const EGLint config_attributes[] = {
         EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
-        EGL_RED_SIZE, 5,
-        EGL_GREEN_SIZE, 6,
-        EGL_BLUE_SIZE, 5,
+        EGL_BUFFER_SIZE, 16,
+        EGL_DEPTH_SIZE, 16,
         EGL_NONE};
     EGLConfig config = 0;
     EGLint config_count = 0;
-    if (!eglChooseConfig(display_, config_attributes, &config, 1,
-                         &config_count)) {
-      return Fail("eglChooseConfig", eglGetError());
+    if (!api_.egl_choose_config(display_, config_attributes, &config, 1,
+                                &config_count)) {
+      return Fail("eglChooseConfig", api_.egl_get_error());
     }
-    if (config_count == 0) return Fail("no RGB565 EGL config", EGL_SUCCESS);
+    if (config_count == 0) return Fail("no 16-bit EGL window config", EGL_SUCCESS);
 
-    surface_ = eglCreateWindowSurface(
+    surface_ = api_.egl_create_window_surface(
         display_, config,
         static_cast<EGLNativeWindowType>(window->NativeWindowHandle()),
         nullptr);
     if (surface_ == EGL_NO_SURFACE) {
-      return Fail("eglCreateWindowSurface", eglGetError());
+      return Fail("eglCreateWindowSurface", api_.egl_get_error());
     }
-    const EGLint context_attributes[] = {EGL_NONE};
-    context_ = eglCreateContext(display_, config, EGL_NO_CONTEXT,
-                                context_attributes);
+    context_ = api_.egl_create_context(display_, config, EGL_NO_CONTEXT, nullptr);
     if (context_ == EGL_NO_CONTEXT) {
-      return Fail("eglCreateContext", eglGetError());
+      return Fail("eglCreateContext", api_.egl_get_error());
     }
-    if (!eglMakeCurrent(display_, surface_, surface_, context_)) {
-      return Fail("eglMakeCurrent", eglGetError());
+    if (!api_.egl_make_current(display_, surface_, surface_, context_)) {
+      return Fail("eglMakeCurrent", api_.egl_get_error());
     }
     return true;
   }
 
   bool Swap() {
     if (display_ != EGL_NO_DISPLAY && surface_ != EGL_NO_SURFACE &&
-        eglSwapBuffers(display_, surface_)) {
+        api_.egl_swap_buffers(display_, surface_)) {
       return true;
     }
-    return Fail("eglSwapBuffers", eglGetError());
+    return Fail("eglSwapBuffers", api_.egl_get_error());
   }
 
   const std::string& error_message() const { return error_message_; }
+  const SymbianGlesApi& api() const { return api_; }
 
  private:
   bool Fail(const char* stage, EGLint error) {
@@ -153,19 +282,23 @@ class Es1WindowContext final {
   void Close() {
     if (display_ != EGL_NO_DISPLAY) {
       if (context_ != EGL_NO_CONTEXT) {
-        eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE,
-                       EGL_NO_CONTEXT);
-        eglDestroyContext(display_, context_);
+        api_.egl_make_current(display_, EGL_NO_SURFACE, EGL_NO_SURFACE,
+                              EGL_NO_CONTEXT);
+        api_.egl_destroy_context(display_, context_);
       }
-      if (surface_ != EGL_NO_SURFACE) eglDestroySurface(display_, surface_);
-      if (initialized_) eglTerminate(display_);
+      if (surface_ != EGL_NO_SURFACE) {
+        api_.egl_destroy_surface(display_, surface_);
+      }
+      if (initialized_) api_.egl_terminate(display_);
     }
     display_ = EGL_NO_DISPLAY;
     surface_ = EGL_NO_SURFACE;
     context_ = EGL_NO_CONTEXT;
     initialized_ = false;
+    api_.Close();
   }
 
+  SymbianGlesApi api_;
   EGLDisplay display_ = EGL_NO_DISPLAY;
   EGLSurface surface_ = EGL_NO_SURFACE;
   EGLContext context_ = EGL_NO_CONTEXT;
@@ -317,12 +450,12 @@ struct PageLayout {
   std::vector<std::vector<GLfloat>> pages;
 };
 
-std::vector<std::string> MakeReport() {
-  const char* version = reinterpret_cast<const char*>(glGetString(GL_VERSION));
-  const char* renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
-  const char* vendor = reinterpret_cast<const char*>(glGetString(GL_VENDOR));
+std::vector<std::string> MakeReport(const SymbianGlesApi& api) {
+  const char* version = reinterpret_cast<const char*>(api.gl_get_string(GL_VERSION));
+  const char* renderer = reinterpret_cast<const char*>(api.gl_get_string(GL_RENDERER));
+  const char* vendor = reinterpret_cast<const char*>(api.gl_get_string(GL_VENDOR));
   const char* raw_extensions =
-      reinterpret_cast<const char*>(glGetString(GL_EXTENSIONS));
+      reinterpret_cast<const char*>(api.gl_get_string(GL_EXTENSIONS));
   const std::string_view extensions =
       raw_extensions ? std::string_view(raw_extensions) : std::string_view();
   std::vector<std::string> extension_names;
@@ -349,32 +482,32 @@ std::vector<std::string> MakeReport() {
                           : "not advertised"));
   lines.emplace_back("EGL proc-address tests:");
   lines.emplace_back(std::string("glGenProgramsARB: ") +
-                     (HasProc("glGenProgramsARB") ? "yes" : "no"));
+                     (HasProc(api, "glGenProgramsARB") ? "yes" : "no"));
   lines.emplace_back(std::string("glBindProgramARB: ") +
-                     (HasProc("glBindProgramARB") ? "yes" : "no"));
+                     (HasProc(api, "glBindProgramARB") ? "yes" : "no"));
   lines.emplace_back(std::string("glProgramStringARB: ") +
-                     (HasProc("glProgramStringARB") ? "yes" : "no"));
+                     (HasProc(api, "glProgramStringARB") ? "yes" : "no"));
   lines.emplace_back(std::string("glProgramEnvParameter4fvARB: ") +
-                     (HasProc("glProgramEnvParameter4fvARB")
+                     (HasProc(api, "glProgramEnvParameter4fvARB")
                           ? "yes"
                           : "no"));
   lines.emplace_back(std::string("glDeleteProgramsARB: ") +
-                     (HasProc("glDeleteProgramsARB") ? "yes" : "no"));
+                     (HasProc(api, "glDeleteProgramsARB") ? "yes" : "no"));
   lines.emplace_back("GL_OES_matrix_palette procs:");
   lines.emplace_back(std::string("glCurrentPaletteMatrixOES: ") +
-                     (HasProc("glCurrentPaletteMatrixOES")
+                     (HasProc(api, "glCurrentPaletteMatrixOES")
                           ? "yes"
                           : "no"));
   lines.emplace_back(std::string("glLoadPaletteFromModelViewMatrixOES: ") +
-                     (HasProc("glLoadPaletteFromModelViewMatrixOES")
+                     (HasProc(api, "glLoadPaletteFromModelViewMatrixOES")
                           ? "yes"
                           : "no"));
   lines.emplace_back(std::string("glMatrixIndexPointerOES: ") +
-                     (HasProc("glMatrixIndexPointerOES")
+                     (HasProc(api, "glMatrixIndexPointerOES")
                           ? "yes"
                           : "no"));
   lines.emplace_back(std::string("glWeightPointerOES: ") +
-                     (HasProc("glWeightPointerOES") ? "yes" : "no"));
+                     (HasProc(api, "glWeightPointerOES") ? "yes" : "no"));
   lines.emplace_back("Runtime GL_EXTENSIONS tokens:");
   for (const std::string& extension : extension_names) {
     lines.push_back(extension);
@@ -430,7 +563,8 @@ int RunWindow(WindowSurface* window) {
     return ShowEglFailure(window, context.error_message());
   }
 
-  const std::vector<std::string> report = MakeReport();
+  const SymbianGlesApi& api = context.api();
+  const std::vector<std::string> report = MakeReport(api);
   PageLayout layout = MakePageLayout(report, window->size());
   bool running = true;
   std::size_t page = 0;
@@ -478,24 +612,24 @@ int RunWindow(WindowSurface* window) {
     const int height = layout.height;
     const std::vector<GLfloat>& vertices = layout.pages[page];
 
-    glViewport(0, 0, width, height);
-    glClearColor(0.015f, 0.025f, 0.05f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_CULL_FACE);
-    glDisable(GL_TEXTURE_2D);
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    glOrthof(0.0f, static_cast<GLfloat>(width),
+    api.gl_viewport(0, 0, width, height);
+    api.gl_clear_color(0.015f, 0.025f, 0.05f, 1.0f);
+    api.gl_clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    api.gl_disable(GL_DEPTH_TEST);
+    api.gl_disable(GL_CULL_FACE);
+    api.gl_disable(GL_TEXTURE_2D);
+    api.gl_matrix_mode(GL_PROJECTION);
+    api.gl_load_identity();
+    api.gl_orthof(0.0f, static_cast<GLfloat>(width),
              static_cast<GLfloat>(height), 0.0f, -1.0f, 1.0f);
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
-    glColor4f(0.45f, 1.0f, 0.68f, 1.0f);
-    glEnableClientState(GL_VERTEX_ARRAY);
-    glVertexPointer(2, GL_FLOAT, 0, vertices.empty() ? nullptr : vertices.data());
-    glDrawArrays(GL_TRIANGLES, 0,
+    api.gl_matrix_mode(GL_MODELVIEW);
+    api.gl_load_identity();
+    api.gl_color4f(0.45f, 1.0f, 0.68f, 1.0f);
+    api.gl_enable_client_state(GL_VERTEX_ARRAY);
+    api.gl_vertex_pointer(2, GL_FLOAT, 0, vertices.empty() ? nullptr : vertices.data());
+    api.gl_draw_arrays(GL_TRIANGLES, 0,
                  static_cast<GLsizei>(vertices.size() / 2));
-    glDisableClientState(GL_VERTEX_ARRAY);
+    api.gl_disable_client_state(GL_VERTEX_ARRAY);
     if (!context.Swap()) break;
     User::After(100000);
   }

@@ -1,12 +1,13 @@
 # GLES Extension Probe (Symbian)
 
-A small on-device OpenGL ES 1.x diagnostic app. It creates an ES 1.x EGL
-window context directly (rather than using the SDK's ES2-only
-`GlesWindowContext`), then displays the context's `GL_VERSION`, `GL_RENDERER`,
-`GL_VENDOR`, every space-delimited token returned by `glGetString(GL_EXTENSIONS)`,
-and the result of `eglGetProcAddress` for IMG VGP and OES matrix palette entry
-points. The EGL setup avoids EGL 1.2/ES2-only attributes so it can run on legacy
-Symbian devices such as the Nokia N95.
+A small on-device OpenGL ES 1.x diagnostic app. It dynamically loads the
+legacy `libGLES_CM.dll` and resolves its EGL/GLES 1.1 entry points, following
+the same compatibility path used by the Quake III Symbian port. It displays
+`GL_VERSION`, `GL_RENDERER`, `GL_VENDOR`, every space-delimited token returned
+by `glGetString(GL_EXTENSIONS)`, and the result of the driver's
+`eglGetProcAddress` for IMG VGP and OES matrix-palette entry points. The EGL
+config requests the N95-style 16-bit color and depth buffers and avoids
+ES2-only attributes/import DLLs.
 
 The report is paginated. Use left/right or up/down keys; tap the left/right
 half of the screen to change pages; Escape closes the app.
