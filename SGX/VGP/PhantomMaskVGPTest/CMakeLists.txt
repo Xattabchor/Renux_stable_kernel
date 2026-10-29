@@ -13,8 +13,6 @@ symbian_add_executable(phantommask
 target_include_directories(phantommask PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(phantommask PRIVATE
   Symbian::GlesDisplay
-  Symbian::GLES1
-  Symbian::EGL
   Symbian::WindowServer
   Symbian::Gdi
   Symbian::Math

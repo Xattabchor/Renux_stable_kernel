@@ -1,6 +1,7 @@
 #include "application.h"
 
 #include <e32std.h>
+#include <EGL/egl.h>
 #include <GLES/gl.h>
 
 #include <algorithm>
@@ -8,8 +9,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <cstdio>
+#include <string>
 
-#include "symbian/api/display/gles_window_context.h"
 #include "symbian/api/display/window_surface.h"
 #include "symbian/api/time/monotonic_clock.h"
 #include "phantom_mask_scene_data.h"
@@ -24,7 +26,6 @@ extern const std::uint8_t phantom_room_still_pvr_end[];
 }
 
 namespace {
-using symbian::api::display::GlesWindowContext;
 using symbian::api::display::WindowInputKind;
 using symbian::api::display::WindowKey;
 using symbian::api::display::WindowSurface;
@@ -73,20 +74,236 @@ struct ShCoefficients {
   GLfloat c_c[4];
 };
 
-template <typename Function>
-Function LoadProcedure(const char* name) {
-  return reinterpret_cast<Function>(GlesWindowContext::GetProcAddress(name));
-}
+// Nokia Symbian 9.x firmware exposes its EGL 1.1 and GLES 1.1 entry points
+// through libGLES_CM.dll. Load that combined driver dynamically instead of
+// importing the newer SDK's separate libegl.dll/libglesv1_cm.dll proxies.
+class SymbianGlesApi final {
+ public:
+#define GLES_FN(name) using name##Fn = decltype(&name); name##Fn name##_fn = nullptr
+  GLES_FN(eglGetDisplay);
+  GLES_FN(eglGetError);
+  GLES_FN(eglGetProcAddress);
+  GLES_FN(eglInitialize);
+  GLES_FN(eglChooseConfig);
+  GLES_FN(eglCreateWindowSurface);
+  GLES_FN(eglCreateContext);
+  GLES_FN(eglMakeCurrent);
+  GLES_FN(eglSwapBuffers);
+  GLES_FN(eglDestroyContext);
+  GLES_FN(eglDestroySurface);
+  GLES_FN(eglTerminate);
+  GLES_FN(glGenTextures);
+  GLES_FN(glBindTexture);
+  GLES_FN(glTexParameterf);
+  GLES_FN(glCompressedTexImage2D);
+  GLES_FN(glGetError);
+  GLES_FN(glDeleteTextures);
+  GLES_FN(glGetString);
+  GLES_FN(glClearColor);
+  GLES_FN(glClear);
+  GLES_FN(glDisable);
+  GLES_FN(glEnable);
+  GLES_FN(glCullFace);
+  GLES_FN(glDepthFunc);
+  GLES_FN(glMatrixMode);
+  GLES_FN(glLoadIdentity);
+  GLES_FN(glLoadMatrixf);
+  GLES_FN(glColor4f);
+  GLES_FN(glEnableClientState);
+  GLES_FN(glDisableClientState);
+  GLES_FN(glVertexPointer);
+  GLES_FN(glNormalPointer);
+  GLES_FN(glTexCoordPointer);
+  GLES_FN(glDrawArrays);
+  GLES_FN(glDrawElements);
+  GLES_FN(glTexEnvf);
+  GLES_FN(glLightfv);
+  GLES_FN(glMaterialfv);
+  GLES_FN(glViewport);
+#undef GLES_FN
 
-VgpApi LoadVgpApi() {
+  bool Load() {
+    const TInt result = library_.Load(_L("libGLES_CM.dll"));
+    if (result != KErrNone) {
+      error_ = "RLibrary.Load(libGLES_CM.dll) failed (" +
+               std::to_string(result) + ")";
+      return false;
+    }
+    loaded_ = true;
+    // Symbian GLES 1.1 Common ordinal table; EGL exports precede GLES exports.
+    return LoadFunction(&eglChooseConfig_fn, 1, "eglChooseConfig") &&
+           LoadFunction(&eglCreateContext_fn, 3, "eglCreateContext") &&
+           LoadFunction(&eglCreateWindowSurface_fn, 6, "eglCreateWindowSurface") &&
+           LoadFunction(&eglDestroyContext_fn, 7, "eglDestroyContext") &&
+           LoadFunction(&eglDestroySurface_fn, 8, "eglDestroySurface") &&
+           LoadFunction(&eglGetDisplay_fn, 15, "eglGetDisplay") &&
+           LoadFunction(&eglGetError_fn, 16, "eglGetError") &&
+           LoadFunction(&eglGetProcAddress_fn, 17, "eglGetProcAddress") &&
+           LoadFunction(&eglInitialize_fn, 18, "eglInitialize") &&
+           LoadFunction(&eglMakeCurrent_fn, 19, "eglMakeCurrent") &&
+           LoadFunction(&eglSwapBuffers_fn, 24, "eglSwapBuffers") &&
+           LoadFunction(&eglTerminate_fn, 25, "eglTerminate") &&
+           LoadFunction(&glBindTexture_fn, 60, "glBindTexture") &&
+           LoadFunction(&glClear_fn, 62, "glClear") &&
+           LoadFunction(&glClearColor_fn, 63, "glClearColor") &&
+           LoadFunction(&glColor4f_fn, 69, "glColor4f") &&
+           LoadFunction(&glCompressedTexImage2D_fn, 73, "glCompressedTexImage2D") &&
+           LoadFunction(&glCullFace_fn, 77, "glCullFace") &&
+           LoadFunction(&glDeleteTextures_fn, 78, "glDeleteTextures") &&
+           LoadFunction(&glDepthFunc_fn, 79, "glDepthFunc") &&
+           LoadFunction(&glDisable_fn, 83, "glDisable") &&
+           LoadFunction(&glDisableClientState_fn, 84, "glDisableClientState") &&
+           LoadFunction(&glDrawArrays_fn, 85, "glDrawArrays") &&
+           LoadFunction(&glDrawElements_fn, 86, "glDrawElements") &&
+           LoadFunction(&glEnable_fn, 87, "glEnable") &&
+           LoadFunction(&glEnableClientState_fn, 88, "glEnableClientState") &&
+           LoadFunction(&glGenTextures_fn, 98, "glGenTextures") &&
+           LoadFunction(&glGetError_fn, 99, "glGetError") &&
+           LoadFunction(&glGetString_fn, 101, "glGetString") &&
+           LoadFunction(&glLightfv_fn, 108, "glLightfv") &&
+           LoadFunction(&glLoadIdentity_fn, 113, "glLoadIdentity") &&
+           LoadFunction(&glLoadMatrixf_fn, 114, "glLoadMatrixf") &&
+           LoadFunction(&glMaterialfv_fn, 118, "glMaterialfv") &&
+           LoadFunction(&glNormalPointer_fn, 128, "glNormalPointer") &&
+           LoadFunction(&glTexCoordPointer_fn, 151, "glTexCoordPointer") &&
+           LoadFunction(&glTexEnvf_fn, 152, "glTexEnvf") &&
+           LoadFunction(&glTexParameterf_fn, 157, "glTexParameterf") &&
+           LoadFunction(&glVertexPointer_fn, 162, "glVertexPointer") &&
+           LoadFunction(&glViewport_fn, 163, "glViewport");
+  }
+
+  void Close() {
+    if (loaded_) library_.Close();
+    loaded_ = false;
+  }
+
+  template <typename Function>
+  Function LoadProcedure(const char* name) const {
+    return eglGetProcAddress_fn == nullptr
+               ? nullptr
+               : reinterpret_cast<Function>(eglGetProcAddress_fn(name));
+  }
+
+  const std::string& error_message() const { return error_; }
+
+ private:
+  template <typename Function>
+  bool LoadFunction(Function* output, TInt ordinal, const char* name) {
+    const TLibraryFunction address = library_.Lookup(ordinal);
+    if (address == nullptr) {
+      error_ = std::string("libGLES_CM.dll missing ") + name + " at ordinal " +
+               std::to_string(ordinal);
+      Close();
+      return false;
+    }
+    *output = reinterpret_cast<Function>(address);
+    return true;
+  }
+
+  RLibrary library_;
+  bool loaded_ = false;
+  std::string error_;
+};
+
+VgpApi LoadVgpApi(const SymbianGlesApi& gl) {
   return {
-      LoadProcedure<GenPrograms>("glGenProgramsARB"),
-      LoadProcedure<BindProgram>("glBindProgramARB"),
-      LoadProcedure<ProgramString>("glProgramStringARB"),
-      LoadProcedure<ProgramEnvParameter4fv>("glProgramEnvParameter4fvARB"),
-      LoadProcedure<DeletePrograms>("glDeleteProgramsARB"),
+      gl.LoadProcedure<GenPrograms>("glGenProgramsARB"),
+      gl.LoadProcedure<BindProgram>("glBindProgramARB"),
+      gl.LoadProcedure<ProgramString>("glProgramStringARB"),
+      gl.LoadProcedure<ProgramEnvParameter4fv>("glProgramEnvParameter4fvARB"),
+      gl.LoadProcedure<DeletePrograms>("glDeleteProgramsARB"),
   };
 }
+
+class LegacyEs1Context final {
+ public:
+  LegacyEs1Context() = default;
+  LegacyEs1Context(const LegacyEs1Context&) = delete;
+  LegacyEs1Context& operator=(const LegacyEs1Context&) = delete;
+  ~LegacyEs1Context() { Close(); }
+
+  bool Open(WindowSurface* window) {
+    if (!api_.Load()) {
+      error_ = api_.error_message();
+      return false;
+    }
+    if (window == nullptr || window->NativeWindowHandle() == nullptr) {
+      return Fail("no native window", EGL_BAD_NATIVE_WINDOW);
+    }
+    display_ = api_.eglGetDisplay_fn(EGL_DEFAULT_DISPLAY);
+    if (display_ == EGL_NO_DISPLAY) return Fail("eglGetDisplay", api_.eglGetError_fn());
+    EGLint major = 0;
+    EGLint minor = 0;
+    if (!api_.eglInitialize_fn(display_, &major, &minor)) {
+      return Fail("eglInitialize", api_.eglGetError_fn());
+    }
+    initialized_ = true;
+    // Match the working Quake III Symbian EGL 1.1 setup for N95: 16-bit color,
+    // a 16-bit depth buffer, and no EGL 1.2 renderable-type/client-version tags.
+    const EGLint attributes[] = {EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+                                 EGL_BUFFER_SIZE, 16, EGL_DEPTH_SIZE, 16,
+                                 EGL_NONE};
+    EGLConfig config = 0;
+    EGLint count = 0;
+    if (!api_.eglChooseConfig_fn(display_, attributes, &config, 1, &count)) {
+      return Fail("eglChooseConfig", api_.eglGetError_fn());
+    }
+    if (count == 0) return Fail("no 16-bit EGL config", EGL_SUCCESS);
+    surface_ = api_.eglCreateWindowSurface_fn(
+        display_, config,
+        static_cast<EGLNativeWindowType>(window->NativeWindowHandle()), nullptr);
+    if (surface_ == EGL_NO_SURFACE) {
+      return Fail("eglCreateWindowSurface", api_.eglGetError_fn());
+    }
+    context_ = api_.eglCreateContext_fn(display_, config, EGL_NO_CONTEXT, nullptr);
+    if (context_ == EGL_NO_CONTEXT) {
+      return Fail("eglCreateContext", api_.eglGetError_fn());
+    }
+    if (!api_.eglMakeCurrent_fn(display_, surface_, surface_, context_)) {
+      return Fail("eglMakeCurrent", api_.eglGetError_fn());
+    }
+    return true;
+  }
+
+  bool Swap() {
+    if (display_ != EGL_NO_DISPLAY && surface_ != EGL_NO_SURFACE &&
+        api_.eglSwapBuffers_fn(display_, surface_)) return true;
+    return Fail("eglSwapBuffers", api_.eglGetError_fn());
+  }
+  const std::string& error_message() const { return error_; }
+  const SymbianGlesApi& api() const { return api_; }
+  void Close() {
+    if (display_ != EGL_NO_DISPLAY) {
+      if (context_ != EGL_NO_CONTEXT) {
+        api_.eglMakeCurrent_fn(display_, EGL_NO_SURFACE, EGL_NO_SURFACE,
+                               EGL_NO_CONTEXT);
+        api_.eglDestroyContext_fn(display_, context_);
+      }
+      if (surface_ != EGL_NO_SURFACE) api_.eglDestroySurface_fn(display_, surface_);
+      if (initialized_) api_.eglTerminate_fn(display_);
+    }
+    display_ = EGL_NO_DISPLAY;
+    surface_ = EGL_NO_SURFACE;
+    context_ = EGL_NO_CONTEXT;
+    initialized_ = false;
+    api_.Close();
+  }
+
+ private:
+  bool Fail(const char* stage, EGLint error) {
+    char code[16];
+    std::snprintf(code, sizeof(code), "0x%04x", static_cast<unsigned>(error));
+    error_ = std::string(stage) + " failed (EGL " + code + ")";
+    Close();
+    return false;
+  }
+  SymbianGlesApi api_;
+  EGLDisplay display_ = EGL_NO_DISPLAY;
+  EGLSurface surface_ = EGL_NO_SURFACE;
+  EGLContext context_ = EGL_NO_CONTEXT;
+  bool initialized_ = false;
+  std::string error_;
+};
 
 bool HasExtension(const char* extension_list, const char* wanted) {
   if (!extension_list || !wanted || !*wanted || std::strchr(wanted, ' ')) {
@@ -148,8 +365,8 @@ std::size_t Pvrtc4LevelBytes(unsigned width, unsigned height) {
   return std::max<std::size_t>(32, pixels / 2);
 }
 
-bool LoadPvrV2Texture(const std::uint8_t* data, std::size_t size,
-                      GLuint* texture) {
+bool LoadPvrV2Texture(const SymbianGlesApi& gl, const std::uint8_t* data,
+                      std::size_t size, GLuint* texture) {
   PvrV2View pvr;
   if (!texture || !ParsePvrV2(data, size, &pvr)) {
     return false;
@@ -166,25 +383,25 @@ bool LoadPvrV2Texture(const std::uint8_t* data, std::size_t size,
     return false;
   }
 
-  glGenTextures(1, texture);
-  glBindTexture(GL_TEXTURE_2D, *texture);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+  gl.glGenTextures_fn(1, texture);
+  gl.glBindTexture_fn(GL_TEXTURE_2D, *texture);
+  gl.glTexParameterf_fn(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, static_cast<GLfloat>(GL_LINEAR_MIPMAP_LINEAR));
+  gl.glTexParameterf_fn(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, static_cast<GLfloat>(GL_LINEAR));
+  gl.glTexParameterf_fn(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, static_cast<GLfloat>(GL_REPEAT));
+  gl.glTexParameterf_fn(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, static_cast<GLfloat>(GL_REPEAT));
 
   std::size_t offset = 0;
   level_width = pvr.width;
   level_height = pvr.height;
   for (unsigned level = 0; level < pvr.mip_count; ++level) {
     const std::size_t level_bytes = Pvrtc4LevelBytes(level_width, level_height);
-    glCompressedTexImage2D(
+    gl.glCompressedTexImage2D_fn(
         GL_TEXTURE_2D, static_cast<GLint>(level),
         kCompressedRgbPvrtc4BppV1Img, static_cast<GLsizei>(level_width),
         static_cast<GLsizei>(level_height), 0,
         static_cast<GLsizei>(level_bytes), pvr.pixels + offset);
-    if (glGetError() != GL_NO_ERROR) {
-      glDeleteTextures(1, texture);
+    if (gl.glGetError_fn() != GL_NO_ERROR) {
+      gl.glDeleteTextures_fn(1, texture);
       *texture = 0;
       return false;
     }
@@ -333,38 +550,39 @@ void MakeProjectionMatrix(float fov, float aspect, float* projection) {
                    (kFarPlane - kNearPlane);
 }
 
-void DrawBackground(GLuint texture, bool vgp_active) {
+void DrawBackground(const SymbianGlesApi& gl, GLuint texture,
+                    bool vgp_active) {
   static const GLfloat positions[] = {
       -1.0f, -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
   };
   static const GLfloat texcoords[] = {
       0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,
   };
-  if (vgp_active) glDisable(kVertexProgram);
-  glDisable(GL_DEPTH_TEST);
-  glDisable(GL_CULL_FACE);
-  glDisable(GL_LIGHTING);
-  glMatrixMode(GL_PROJECTION);
-  glLoadIdentity();
-  glMatrixMode(GL_MODELVIEW);
-  glLoadIdentity();
-  glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-  glBindTexture(GL_TEXTURE_2D, texture);
-  glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
-  glEnable(GL_TEXTURE_2D);
-  glEnableClientState(GL_VERTEX_ARRAY);
-  glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-  glVertexPointer(2, GL_FLOAT, 0, positions);
-  glTexCoordPointer(2, GL_FLOAT, 0, texcoords);
-  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-  glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-  glDisableClientState(GL_VERTEX_ARRAY);
-  glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+  if (vgp_active) gl.glDisable_fn(kVertexProgram);
+  gl.glDisable_fn(GL_DEPTH_TEST);
+  gl.glDisable_fn(GL_CULL_FACE);
+  gl.glDisable_fn(GL_LIGHTING);
+  gl.glMatrixMode_fn(GL_PROJECTION);
+  gl.glLoadIdentity_fn();
+  gl.glMatrixMode_fn(GL_MODELVIEW);
+  gl.glLoadIdentity_fn();
+  gl.glColor4f_fn(1.0f, 1.0f, 1.0f, 1.0f);
+  gl.glBindTexture_fn(GL_TEXTURE_2D, texture);
+  gl.glTexEnvf_fn(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, static_cast<GLfloat>(GL_REPLACE));
+  gl.glEnable_fn(GL_TEXTURE_2D);
+  gl.glEnableClientState_fn(GL_VERTEX_ARRAY);
+  gl.glEnableClientState_fn(GL_TEXTURE_COORD_ARRAY);
+  gl.glVertexPointer_fn(2, GL_FLOAT, 0, positions);
+  gl.glTexCoordPointer_fn(2, GL_FLOAT, 0, texcoords);
+  gl.glDrawArrays_fn(GL_TRIANGLE_STRIP, 0, 4);
+  gl.glDisableClientState_fn(GL_TEXTURE_COORD_ARRAY);
+  gl.glDisableClientState_fn(GL_VERTEX_ARRAY);
+  gl.glTexEnvf_fn(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, static_cast<GLfloat>(GL_MODULATE));
 }
 
-void DrawPhantomMask(const float* camera, const float* world, int width,
-                     int height, GLuint texture, bool vgp_active,
-                     const VgpApi& api, GLuint program) {
+void DrawPhantomMask(const SymbianGlesApi& gl, const float* camera,
+                     const float* world, int width, int height, GLuint texture,
+                     bool vgp_active, const VgpApi& api, GLuint program) {
   float view[16];
   float projection[16];
   float model_view[16];
@@ -374,58 +592,60 @@ void DrawPhantomMask(const float* camera, const float* world, int width,
   MakeProjectionMatrix(fov, static_cast<float>(width) / height, projection);
   MultiplyMat4(view, world, model_view);
 
-  glMatrixMode(GL_PROJECTION);
-  glLoadMatrixf(projection);
-  glMatrixMode(GL_MODELVIEW);
-  glLoadMatrixf(model_view);
-  glEnable(GL_DEPTH_TEST);
-  glDepthFunc(GL_LEQUAL);
-  glEnable(GL_CULL_FACE);
-  glCullFace(GL_BACK);
-  glEnable(GL_TEXTURE_2D);
-  glBindTexture(GL_TEXTURE_2D, texture);
-  glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+  gl.glMatrixMode_fn(GL_PROJECTION);
+  gl.glLoadMatrixf_fn(projection);
+  gl.glMatrixMode_fn(GL_MODELVIEW);
+  gl.glLoadMatrixf_fn(model_view);
+  gl.glEnable_fn(GL_DEPTH_TEST);
+  gl.glDepthFunc_fn(GL_LEQUAL);
+  gl.glEnable_fn(GL_CULL_FACE);
+  gl.glCullFace_fn(GL_BACK);
+  gl.glEnable_fn(GL_TEXTURE_2D);
+  gl.glBindTexture_fn(GL_TEXTURE_2D, texture);
+  gl.glTexEnvf_fn(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, static_cast<GLfloat>(GL_MODULATE));
 
-  glEnableClientState(GL_VERTEX_ARRAY);
-  glEnableClientState(GL_NORMAL_ARRAY);
-  glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+  gl.glEnableClientState_fn(GL_VERTEX_ARRAY);
+  gl.glEnableClientState_fn(GL_NORMAL_ARRAY);
+  gl.glEnableClientState_fn(GL_TEXTURE_COORD_ARRAY);
   const GLsizei stride = static_cast<GLsizei>(8 * sizeof(GLfloat));
-  glVertexPointer(3, GL_FLOAT, stride, phantom_mask_scene::kVertices);
-  glNormalPointer(GL_FLOAT, stride, phantom_mask_scene::kVertices + 3);
-  glTexCoordPointer(2, GL_FLOAT, stride, phantom_mask_scene::kVertices + 6);
+  gl.glVertexPointer_fn(3, GL_FLOAT, stride, phantom_mask_scene::kVertices);
+  gl.glNormalPointer_fn(GL_FLOAT, stride, phantom_mask_scene::kVertices + 3);
+  gl.glTexCoordPointer_fn(2, GL_FLOAT, stride, phantom_mask_scene::kVertices + 6);
 
   if (vgp_active) {
     api.bind(kVertexProgram, program);
     UploadModelRows(api, world);
-    glEnable(kVertexProgram);
-    glDisable(GL_LIGHTING);
+    gl.glEnable_fn(kVertexProgram);
+    gl.glDisable_fn(GL_LIGHTING);
   } else {
-    glEnable(GL_LIGHTING);
-    glEnable(GL_LIGHT0);
+    gl.glEnable_fn(GL_LIGHTING);
+    gl.glEnable_fn(GL_LIGHT0);
     const GLfloat ambient[4] = {0.32f, 0.32f, 0.32f, 1.0f};
     const GLfloat diffuse[4] = {0.78f, 0.78f, 0.78f, 1.0f};
     const GLfloat light_position[4] = {0.2f, 0.8f, 1.0f, 0.0f};
-    glLightfv(GL_LIGHT0, GL_AMBIENT, ambient);
-    glLightfv(GL_LIGHT0, GL_DIFFUSE, diffuse);
-    glLightfv(GL_LIGHT0, GL_POSITION, light_position);
+    gl.glLightfv_fn(GL_LIGHT0, GL_AMBIENT, ambient);
+    gl.glLightfv_fn(GL_LIGHT0, GL_DIFFUSE, diffuse);
+    gl.glLightfv_fn(GL_LIGHT0, GL_POSITION, light_position);
     const GLfloat material[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-    glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, material);
+    gl.glMaterialfv_fn(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, material);
   }
 
-  glDrawElements(GL_TRIANGLES, phantom_mask_scene::kIndexCount,
+  gl.glDrawElements_fn(GL_TRIANGLES, phantom_mask_scene::kIndexCount,
                  GL_UNSIGNED_SHORT, phantom_mask_scene::kIndices);
 
-  glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-  glDisableClientState(GL_NORMAL_ARRAY);
-  glDisableClientState(GL_VERTEX_ARRAY);
+  gl.glDisableClientState_fn(GL_TEXTURE_COORD_ARRAY);
+  gl.glDisableClientState_fn(GL_NORMAL_ARRAY);
+  gl.glDisableClientState_fn(GL_VERTEX_ARRAY);
   if (!vgp_active) {
-    glDisable(GL_LIGHT0);
-    glDisable(GL_LIGHTING);
+    gl.glDisable_fn(GL_LIGHT0);
+    gl.glDisable_fn(GL_LIGHTING);
   }
 }
 
-bool InitializeVgp(const VgpApi& api, GLuint* program) {
-  const auto* extensions = reinterpret_cast<const char*>(glGetString(GL_EXTENSIONS));
+bool InitializeVgp(const SymbianGlesApi& gl, const VgpApi& api,
+                   GLuint* program) {
+  const auto* extensions =
+      reinterpret_cast<const char*>(gl.glGetString_fn(GL_EXTENSIONS));
   if (!HasExtension(extensions, "GL_IMG_vertex_program") || !api.gen ||
       !api.bind || !api.load || !api.set_env || !api.remove) {
     return false;
@@ -436,14 +656,14 @@ bool InitializeVgp(const VgpApi& api, GLuint* program) {
            static_cast<GLsizei>(AssetByteCount(phantom_vgp_program_begin,
                                                phantom_vgp_program_end)),
            phantom_vgp_program_begin);
-  if (glGetError() != GL_NO_ERROR) {
+  if (gl.glGetError_fn() != GL_NO_ERROR) {
     api.remove(1, program);
     *program = 0;
     return false;
   }
   const ShCoefficients sh = BuildShCoefficients();
   UploadShCoefficients(api, sh);
-  if (glGetError() != GL_NO_ERROR) {
+  if (gl.glGetError_fn() != GL_NO_ERROR) {
     api.remove(1, program);
     *program = 0;
     return false;
@@ -452,34 +672,34 @@ bool InitializeVgp(const VgpApi& api, GLuint* program) {
 }
 
 int RunWindow(WindowSurface* window) {
-  GlesWindowContext context;
-  if (!context.Open(window, 1).ok() || !context.MakeCurrent().ok()) {
-    return KErrNotSupported;
-  }
-  const char* extensions = reinterpret_cast<const char*>(glGetString(GL_EXTENSIONS));
+  LegacyEs1Context context;
+  if (!context.Open(window)) return KErrNotSupported;
+  const SymbianGlesApi& gl = context.api();
+  const char* extensions =
+      reinterpret_cast<const char*>(gl.glGetString_fn(GL_EXTENSIONS));
   if (!HasExtension(extensions, "GL_IMG_texture_compression_pvrtc")) {
     return KErrNotSupported;
   }
 
   GLuint room_texture = 0;
   GLuint mask_texture = 0;
-  if (!LoadPvrV2Texture(phantom_room_still_pvr_begin,
+  if (!LoadPvrV2Texture(gl, phantom_room_still_pvr_begin,
                         static_cast<std::size_t>(phantom_room_still_pvr_end -
                                                  phantom_room_still_pvr_begin),
                         &room_texture) ||
-      !LoadPvrV2Texture(phantom_mask_main_pvr_begin,
+      !LoadPvrV2Texture(gl, phantom_mask_main_pvr_begin,
                         static_cast<std::size_t>(phantom_mask_main_pvr_end -
                                                  phantom_mask_main_pvr_begin),
                         &mask_texture)) {
-    if (room_texture) glDeleteTextures(1, &room_texture);
-    if (mask_texture) glDeleteTextures(1, &mask_texture);
+    if (room_texture) gl.glDeleteTextures_fn(1, &room_texture);
+    if (mask_texture) gl.glDeleteTextures_fn(1, &mask_texture);
     return KErrCorrupt;
   }
 
-  const VgpApi api = LoadVgpApi();
+  const VgpApi api = LoadVgpApi(gl);
   GLuint program = 0;
-  const bool vgp_active = InitializeVgp(api, &program);
-  glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+  const bool vgp_active = InitializeVgp(gl, api, &program);
+  gl.glClearColor_fn(0.0f, 0.0f, 0.0f, 1.0f);
   const std::int64_t start_ns =
       symbian::api::time::MonotonicClock::NowNanoseconds();
   bool running = true;
@@ -504,9 +724,9 @@ int RunWindow(WindowSurface* window) {
     const auto size = window->size();
     const int width = std::max(1, size.width);
     const int height = std::max(1, size.height);
-    glViewport(0, 0, width, height);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    DrawBackground(room_texture, vgp_active);
+    gl.glViewport_fn(0, 0, width, height);
+    gl.glClear_fn(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    DrawBackground(gl, room_texture, vgp_active);
 
     const std::int64_t now_ns =
         symbian::api::time::MonotonicClock::NowNanoseconds();
@@ -517,16 +737,16 @@ int RunWindow(WindowSurface* window) {
         static_cast<unsigned>(elapsed_frames % phantom_mask_scene::kFrameCount);
     const float* camera = phantom_mask_scene::kCameraFrames + frame * 7;
     const float* world = phantom_mask_scene::kModelMatrices + frame * 16;
-    DrawPhantomMask(camera, world, width, height, mask_texture, vgp_active, api,
+    DrawPhantomMask(gl, camera, world, width, height, mask_texture, vgp_active, api,
                     program);
 
-    if (!context.Swap().ok()) break;
+    if (!context.Swap()) break;
     User::After(33333);
   }
 
   if (vgp_active && program) api.remove(1, &program);
-  glDeleteTextures(1, &mask_texture);
-  glDeleteTextures(1, &room_texture);
+  gl.glDeleteTextures_fn(1, &mask_texture);
+  gl.glDeleteTextures_fn(1, &room_texture);
   context.Close();
   return KErrNone;
 }
