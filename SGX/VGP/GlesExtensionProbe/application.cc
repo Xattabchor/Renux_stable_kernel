@@ -392,7 +392,6 @@ int RunWindow(WindowSurface* window) {
     if (!context.Swap()) break;
     User::After(100000);
   }
-  context.Close();
   return KErrNone;
 }
 }  // namespace
