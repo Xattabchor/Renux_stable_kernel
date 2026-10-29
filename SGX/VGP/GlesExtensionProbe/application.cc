@@ -1,6 +1,7 @@
 #include "application.h"
 
 #include <e32std.h>
+#include <EGL/egl.h>
 #include <GLES/gl.h>
 
 #include <algorithm>
@@ -10,11 +11,9 @@
 #include <utility>
 #include <vector>
 
-#include "symbian/api/display/gles_window_context.h"
 #include "symbian/api/display/window_surface.h"
 
 namespace {
-using symbian::api::display::GlesWindowContext;
 using symbian::api::display::WindowInputKind;
 using symbian::api::display::WindowKey;
 using symbian::api::display::WindowSurface;
@@ -65,8 +64,96 @@ const Glyph& FindGlyph(char character) {
 }
 
 bool HasProc(const char* name) {
-  return GlesWindowContext::GetProcAddress(name) != nullptr;
+  return eglGetProcAddress(name) != nullptr;
 }
+
+// The SDK's GlesWindowContext deliberately creates only OpenGL ES 2 contexts.
+// This probe targets Symbian handsets such as the Nokia N95, whose PowerVR
+// MBX driver exposes OpenGL ES 1.1. Use the EGL 1.x-compatible ES1 path
+// directly: no EGL 1.2 eglBindAPI or ES2-only config/context attributes.
+class Es1WindowContext final {
+ public:
+  Es1WindowContext() = default;
+  Es1WindowContext(const Es1WindowContext&) = delete;
+  Es1WindowContext& operator=(const Es1WindowContext&) = delete;
+  ~Es1WindowContext() { Close(); }
+
+  bool Open(WindowSurface* window) {
+    if (window == nullptr || window->NativeWindowHandle() == nullptr) {
+      return false;
+    }
+    display_ = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    if (display_ == EGL_NO_DISPLAY) return false;
+    EGLint major = 0;
+    EGLint minor = 0;
+    if (!eglInitialize(display_, &major, &minor)) {
+      Close();
+      return false;
+    }
+    initialized_ = true;
+
+    // EGL_RENDERABLE_TYPE and eglBindAPI are EGL 1.2 additions. The N95's
+    // legacy EGL 1.x implementation is ES-only, so request just a window
+    // surface with RGB565 and let eglCreateContext select its native ES API.
+    const EGLint config_attributes[] = {
+        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+        EGL_RED_SIZE, 5,
+        EGL_GREEN_SIZE, 6,
+        EGL_BLUE_SIZE, 5,
+        EGL_NONE};
+    EGLConfig config = 0;
+    EGLint config_count = 0;
+    if (!eglChooseConfig(display_, config_attributes, &config, 1,
+                         &config_count) || config_count == 0) {
+      Close();
+      return false;
+    }
+    surface_ = eglCreateWindowSurface(
+        display_, config,
+        static_cast<EGLNativeWindowType>(window->NativeWindowHandle()),
+        nullptr);
+    if (surface_ == EGL_NO_SURFACE) {
+      Close();
+      return false;
+    }
+    const EGLint context_attributes[] = {EGL_NONE};
+    context_ = eglCreateContext(display_, config, EGL_NO_CONTEXT,
+                                context_attributes);
+    if (context_ == EGL_NO_CONTEXT ||
+        !eglMakeCurrent(display_, surface_, surface_, context_)) {
+      Close();
+      return false;
+    }
+    return true;
+  }
+
+  bool Swap() {
+    return display_ != EGL_NO_DISPLAY && surface_ != EGL_NO_SURFACE &&
+           eglSwapBuffers(display_, surface_);
+  }
+
+ private:
+  void Close() {
+    if (display_ != EGL_NO_DISPLAY) {
+      if (context_ != EGL_NO_CONTEXT) {
+        eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE,
+                       EGL_NO_CONTEXT);
+        eglDestroyContext(display_, context_);
+      }
+      if (surface_ != EGL_NO_SURFACE) eglDestroySurface(display_, surface_);
+      if (initialized_) eglTerminate(display_);
+    }
+    display_ = EGL_NO_DISPLAY;
+    surface_ = EGL_NO_SURFACE;
+    context_ = EGL_NO_CONTEXT;
+    initialized_ = false;
+  }
+
+  EGLDisplay display_ = EGL_NO_DISPLAY;
+  EGLSurface surface_ = EGL_NO_SURFACE;
+  EGLContext context_ = EGL_NO_CONTEXT;
+  bool initialized_ = false;
+};
 
 bool HasExtension(std::string_view list, std::string_view wanted) {
   std::size_t start = 0;
@@ -233,10 +320,8 @@ PageLayout MakePageLayout(const std::vector<std::string>& report,
 }
 
 int RunWindow(WindowSurface* window) {
-  GlesWindowContext context;
-  if (!context.Open(window, 1).ok() || !context.MakeCurrent().ok()) {
-    return KErrNotSupported;
-  }
+  Es1WindowContext context;
+  if (!context.Open(window)) return KErrNotSupported;
 
   const std::vector<std::string> report = MakeReport();
   PageLayout layout = MakePageLayout(report, window->size());
@@ -304,7 +389,7 @@ int RunWindow(WindowSurface* window) {
     glDrawArrays(GL_TRIANGLES, 0,
                  static_cast<GLsizei>(vertices.size() / 2));
     glDisableClientState(GL_VERTEX_ARRAY);
-    if (!context.Swap().ok()) break;
+    if (!context.Swap()) break;
     User::After(100000);
   }
   context.Close();
