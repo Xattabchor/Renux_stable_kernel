@@ -1,0 +1,10 @@
+
+
+*************** Compiler Log ***************
+
+Found TOK_3SWIZZLE, Expected 1_SWIZZLE? (token = 409)
+Line 180:
+MUL acc.xyz, t.xyz, iWeight.x;
+              ^
+
+************* End Compiler Log *************
