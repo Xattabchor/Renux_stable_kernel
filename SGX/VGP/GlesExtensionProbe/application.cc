@@ -386,11 +386,25 @@ void DrawSoftwareText(symbian::api::display::Rgb565Frame* frame,
   }
 }
 
+int ShowInfoPrintFailure(std::string_view detail) {
+  TBuf<96> message;
+  _LIT(KEglPrefix, "GLES: ");
+  message.Copy(KEglPrefix);
+  for (const char character : detail) {
+    if (message.Length() >= message.MaxLength()) break;
+    const TUint8 byte = static_cast<TUint8>(character);
+    message.Append(TChar(byte >= 32 && byte <= 126 ? byte : '?'));
+  }
+  User::InfoPrint(message);
+  User::After(2000000);
+  return KErrNone;
+}
+
 int ShowEglFailure(WindowSurface* window, std::string_view detail) {
   using symbian::api::display::Rgb565Frame;
   using symbian::api::display::WindowInputKind;
   using symbian::api::display::WindowKey;
-  if (window == nullptr) return KErrNotSupported;
+  if (window == nullptr) return ShowInfoPrintFailure(detail);
 
   const auto draw = [&]() -> bool {
     auto frame_result = window->CreateRgb565Frame();
@@ -418,7 +432,7 @@ int ShowEglFailure(WindowSurface* window, std::string_view detail) {
     return window->Present().ok();
   };
 
-  if (!draw()) return KErrNotSupported;
+  if (!draw()) return ShowInfoPrintFailure(detail);
   bool running = true;
   while (running) {
     for (int count = 0; count < 32; ++count) {
@@ -644,10 +658,7 @@ int RunApplication() {
   // task caption and avoid that compatibility-sensitive SetName call.
   const auto opened = window.Open();
   if (!opened.ok()) {
-    _LIT(KProbeWindowOpenFailed, "GLES probe window open failed");
-    User::InfoPrint(KProbeWindowOpenFailed);
-    User::After(2000000);
-    return KErrNone;
+    return ShowInfoPrintFailure(opened.ToString());
   }
   return RunWindow(&window);
 }
