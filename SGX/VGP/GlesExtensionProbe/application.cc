@@ -85,18 +85,6 @@ class SymbianGlesApi final {
   using EglDestroySurfaceFn = decltype(&eglDestroySurface);
   using EglTerminateFn = decltype(&eglTerminate);
   using GlGetStringFn = decltype(&glGetString);
-  using GlViewportFn = decltype(&glViewport);
-  using GlClearColorFn = decltype(&glClearColor);
-  using GlClearFn = decltype(&glClear);
-  using GlDisableFn = decltype(&glDisable);
-  using GlMatrixModeFn = decltype(&glMatrixMode);
-  using GlLoadIdentityFn = decltype(&glLoadIdentity);
-  using GlOrthofFn = decltype(&glOrthof);
-  using GlColor4fFn = decltype(&glColor4f);
-  using GlEnableClientStateFn = decltype(&glEnableClientState);
-  using GlVertexPointerFn = decltype(&glVertexPointer);
-  using GlDrawArraysFn = decltype(&glDrawArrays);
-  using GlDisableClientStateFn = decltype(&glDisableClientState);
 
   SymbianGlesApi() = default;
   SymbianGlesApi(const SymbianGlesApi&) = delete;
@@ -126,21 +114,7 @@ class SymbianGlesApi final {
            LoadFunction(&egl_make_current, 18, "eglMakeCurrent") &&
            LoadFunction(&egl_swap_buffers, 22, "eglSwapBuffers") &&
            LoadFunction(&egl_terminate, 23, "eglTerminate") &&
-           LoadFunction(&gl_clear, 31, "glClear") &&
-           LoadFunction(&gl_clear_color, 32, "glClearColor") &&
-           LoadFunction(&gl_color4f, 38, "glColor4f") &&
-           LoadFunction(&gl_disable, 52, "glDisable") &&
-           LoadFunction(&gl_disable_client_state, 53,
-                        "glDisableClientState") &&
-           LoadFunction(&gl_draw_arrays, 54, "glDrawArrays") &&
-           LoadFunction(&gl_enable_client_state, 57,
-                        "glEnableClientState") &&
-           LoadFunction(&gl_get_string, 70, "glGetString") &&
-           LoadFunction(&gl_load_identity, 82, "glLoadIdentity") &&
-           LoadFunction(&gl_matrix_mode, 90, "glMatrixMode") &&
-           LoadFunction(&gl_orthof, 98, "glOrthof") &&
-           LoadFunction(&gl_vertex_pointer, 131, "glVertexPointer") &&
-           LoadFunction(&gl_viewport, 132, "glViewport");
+           LoadFunction(&gl_get_string, 70, "glGetString");
   }
 
   void Close() {
@@ -163,18 +137,6 @@ class SymbianGlesApi final {
   EglDestroySurfaceFn egl_destroy_surface = nullptr;
   EglTerminateFn egl_terminate = nullptr;
   GlGetStringFn gl_get_string = nullptr;
-  GlViewportFn gl_viewport = nullptr;
-  GlClearColorFn gl_clear_color = nullptr;
-  GlClearFn gl_clear = nullptr;
-  GlDisableFn gl_disable = nullptr;
-  GlMatrixModeFn gl_matrix_mode = nullptr;
-  GlLoadIdentityFn gl_load_identity = nullptr;
-  GlOrthofFn gl_orthof = nullptr;
-  GlColor4fFn gl_color4f = nullptr;
-  GlEnableClientStateFn gl_enable_client_state = nullptr;
-  GlVertexPointerFn gl_vertex_pointer = nullptr;
-  GlDrawArraysFn gl_draw_arrays = nullptr;
-  GlDisableClientStateFn gl_disable_client_state = nullptr;
 
  private:
   template <typename Function>
@@ -347,29 +309,6 @@ void WrapAndAppend(std::vector<std::string>* lines, std::string_view text,
   lines->emplace_back(text);
 }
 
-void AddQuad(std::vector<GLfloat>* vertices, float left, float top,
-             float right, float bottom) {
-  const GLfloat quad[] = {left, top, right, top, right, bottom,
-                          left, top, right, bottom, left, bottom};
-  vertices->insert(vertices->end(), quad, quad + 12);
-}
-
-void AddText(std::vector<GLfloat>* vertices, std::string_view text, int x,
-             int y, int scale) {
-  for (std::size_t index = 0; index < text.size(); ++index) {
-    const Glyph& glyph = FindGlyph(text[index]);
-    for (int row = 0; row < 5; ++row) {
-      for (int column = 0; column < 3; ++column) {
-        if ((glyph.rows[row] & (1u << (2 - column))) == 0) continue;
-        const float left = static_cast<float>(x + index * 4 * scale +
-                                              column * scale);
-        const float top = static_cast<float>(y + row * scale);
-        AddQuad(vertices, left, top, left + scale, top + scale);
-      }
-    }
-  }
-}
-
 void SetRgb565Pixel(symbian::api::display::Rgb565Frame* frame, int x, int y,
                     std::uint16_t color) {
   if (frame == nullptr || x < 0 || y < 0 || x >= frame->size.width ||
@@ -477,7 +416,7 @@ struct PageLayout {
   int scale = 1;
   int margin = 5;
   int line_height = 7;
-  std::vector<std::vector<GLfloat>> pages;
+  std::vector<std::vector<std::string>> pages;
 };
 
 std::vector<std::string> MakeReport(const SymbianGlesApi& api) {
@@ -506,38 +445,49 @@ std::vector<std::string> MakeReport(const SymbianGlesApi& api) {
   lines.emplace_back(std::string("Vendor: ") + (vendor ? vendor : "(null)"));
   lines.emplace_back("Extensions reported: " +
                      std::to_string(extension_names.size()));
+  const bool has_vertex_program =
+      HasExtension(extensions, "GL_IMG_vertex_program");
   lines.emplace_back(std::string("GL_IMG_vertex_program: ") +
-                     (HasExtension(extensions, "GL_IMG_vertex_program")
-                          ? "advertised"
-                          : "not advertised"));
-  lines.emplace_back("EGL proc-address tests:");
-  lines.emplace_back(std::string("glGenProgramsARB: ") +
-                     (HasProc(api, "glGenProgramsARB") ? "yes" : "no"));
-  lines.emplace_back(std::string("glBindProgramARB: ") +
-                     (HasProc(api, "glBindProgramARB") ? "yes" : "no"));
-  lines.emplace_back(std::string("glProgramStringARB: ") +
-                     (HasProc(api, "glProgramStringARB") ? "yes" : "no"));
-  lines.emplace_back(std::string("glProgramEnvParameter4fvARB: ") +
-                     (HasProc(api, "glProgramEnvParameter4fvARB")
-                          ? "yes"
-                          : "no"));
-  lines.emplace_back(std::string("glDeleteProgramsARB: ") +
-                     (HasProc(api, "glDeleteProgramsARB") ? "yes" : "no"));
-  lines.emplace_back("GL_OES_matrix_palette procs:");
-  lines.emplace_back(std::string("glCurrentPaletteMatrixOES: ") +
-                     (HasProc(api, "glCurrentPaletteMatrixOES")
-                          ? "yes"
-                          : "no"));
-  lines.emplace_back(std::string("glLoadPaletteFromModelViewMatrixOES: ") +
-                     (HasProc(api, "glLoadPaletteFromModelViewMatrixOES")
-                          ? "yes"
-                          : "no"));
-  lines.emplace_back(std::string("glMatrixIndexPointerOES: ") +
-                     (HasProc(api, "glMatrixIndexPointerOES")
-                          ? "yes"
-                          : "no"));
-  lines.emplace_back(std::string("glWeightPointerOES: ") +
-                     (HasProc(api, "glWeightPointerOES") ? "yes" : "no"));
+                     (has_vertex_program ? "advertised" : "not advertised"));
+  if (has_vertex_program) {
+    lines.emplace_back("IMG vertex-program entry points:");
+    lines.emplace_back(std::string("glGenProgramsARB: ") +
+                       (HasProc(api, "glGenProgramsARB") ? "yes" : "no"));
+    lines.emplace_back(std::string("glBindProgramARB: ") +
+                       (HasProc(api, "glBindProgramARB") ? "yes" : "no"));
+    lines.emplace_back(std::string("glProgramStringARB: ") +
+                       (HasProc(api, "glProgramStringARB") ? "yes" : "no"));
+    lines.emplace_back(std::string("glProgramEnvParameter4fvARB: ") +
+                       (HasProc(api, "glProgramEnvParameter4fvARB")
+                            ? "yes"
+                            : "no"));
+    lines.emplace_back(std::string("glDeleteProgramsARB: ") +
+                       (HasProc(api, "glDeleteProgramsARB") ? "yes" : "no"));
+  } else {
+    lines.emplace_back("IMG entry-point queries skipped (extension absent)");
+  }
+
+  const bool has_matrix_palette =
+      HasExtension(extensions, "GL_OES_matrix_palette");
+  if (has_matrix_palette) {
+    lines.emplace_back("OES matrix-palette entry points:");
+    lines.emplace_back(std::string("glCurrentPaletteMatrixOES: ") +
+                       (HasProc(api, "glCurrentPaletteMatrixOES")
+                            ? "yes"
+                            : "no"));
+    lines.emplace_back(std::string("glLoadPaletteFromModelViewMatrixOES: ") +
+                       (HasProc(api, "glLoadPaletteFromModelViewMatrixOES")
+                            ? "yes"
+                            : "no"));
+    lines.emplace_back(std::string("glMatrixIndexPointerOES: ") +
+                       (HasProc(api, "glMatrixIndexPointerOES")
+                            ? "yes"
+                            : "no"));
+    lines.emplace_back(std::string("glWeightPointerOES: ") +
+                       (HasProc(api, "glWeightPointerOES") ? "yes" : "no"));
+  } else {
+    lines.emplace_back("OES matrix-palette queries skipped (extension absent)");
+  }
   lines.emplace_back("Runtime GL_EXTENSIONS tokens:");
   for (const std::string& extension : extension_names) {
     lines.push_back(extension);
@@ -570,35 +520,62 @@ PageLayout MakePageLayout(const std::vector<std::string>& report,
     const std::size_t first_line = page * lines_per_page;
     const std::size_t last_line =
         std::min(wrapped.size(), first_line + lines_per_page);
-    std::vector<GLfloat> vertices;
+    std::vector<std::string> page_lines;
+    page_lines.reserve(last_line - first_line + 1);
     for (std::size_t line = first_line; line < last_line; ++line) {
-      AddText(&vertices, wrapped[line], layout.margin,
-              layout.margin + static_cast<int>(line - first_line) *
-                                  layout.line_height,
-              layout.scale);
+      page_lines.push_back(wrapped[line]);
     }
-    const std::string footer = "LEFT/RIGHT OR TAP: PAGE " +
-                               std::to_string(page + 1) + "/" +
-                               std::to_string(page_count);
-    AddText(&vertices, footer, layout.margin,
-            layout.height - 2 * layout.margin, layout.scale);
-    layout.pages.push_back(std::move(vertices));
+    page_lines.push_back("LEFT/RIGHT OR TAP: PAGE " +
+                         std::to_string(page + 1) + "/" +
+                         std::to_string(page_count));
+    layout.pages.push_back(std::move(page_lines));
   }
   return layout;
 }
 
-int RunWindow(WindowSurface* window) {
-  Es1WindowContext context;
-  if (!context.Open(window)) {
-    return ShowEglFailure(window, context.error_message());
+bool DrawReportPage(WindowSurface* window,
+                    symbian::api::display::Rgb565Frame* frame,
+                    const PageLayout& layout, std::size_t page) {
+  if (window == nullptr || frame == nullptr || layout.pages.empty()) return false;
+  for (int y = 0; y < frame->size.height; ++y) {
+    for (int x = 0; x < frame->size.width; ++x) {
+      SetRgb565Pixel(frame, x, y, 0x0841);
+    }
   }
+  const std::vector<std::string>& lines = layout.pages[page];
+  for (std::size_t index = 0; index < lines.size(); ++index) {
+    const std::uint16_t color = index == 0 ? 0x07ff : 0xffff;
+    DrawSoftwareText(frame, lines[index], layout.margin,
+                     layout.margin + static_cast<int>(index) * layout.line_height,
+                     layout.scale, color);
+  }
+  return window->Present().ok();
+}
 
-  const SymbianGlesApi& api = context.api();
-  const std::vector<std::string> report = MakeReport(api);
+int RunWindow(WindowSurface* window) {
+  std::vector<std::string> report;
+  {
+    Es1WindowContext context;
+    if (!context.Open(window)) {
+      return ShowEglFailure(window, context.error_message());
+    }
+    report = MakeReport(context.api());
+  }  // Release EGL/GLES before drawing the text-only report through WindowServer.
+
   PageLayout layout = MakePageLayout(report, window->size());
+  auto frame_result = window->CreateRgb565Frame();
+  if (!frame_result.ok()) {
+    return ShowInfoPrintFailure(frame_result.status().ToString());
+  }
+  symbian::api::display::Rgb565Frame frame = *frame_result;
   bool running = true;
+  bool dirty = true;
   std::size_t page = 0;
   while (running) {
+    if (dirty) {
+      if (!DrawReportPage(window, &frame, layout, page)) break;
+      dirty = false;
+    }
     for (int count = 0; count < 32; ++count) {
       auto event = window->PollInput();
       if (!event.ok()) {
@@ -613,56 +590,41 @@ int RunWindow(WindowSurface* window) {
         running = false;
         break;
       }
-      if (input.kind == WindowInputKind::kKeyDown) {
-        if (input.key == WindowKey::kRight || input.key == WindowKey::kDown ||
-            input.key == WindowKey::kEnter || input.key == WindowKey::kSelect) {
-          ++page;
-        } else if (input.key == WindowKey::kLeft ||
-                   input.key == WindowKey::kUp ||
-                   input.key == WindowKey::kBackspace) {
-          if (page > 0) --page;
-        }
+      const std::size_t page_count = layout.pages.size();
+      if (page_count == 0) break;
+      if (input.kind == WindowInputKind::kKeyDown &&
+          (input.key == WindowKey::kRight || input.key == WindowKey::kDown ||
+           input.key == WindowKey::kEnter || input.key == WindowKey::kSelect)) {
+        page = (page + 1) % page_count;
+        dirty = true;
+      } else if (input.kind == WindowInputKind::kKeyDown &&
+                 (input.key == WindowKey::kLeft || input.key == WindowKey::kUp ||
+                  input.key == WindowKey::kBackspace)) {
+        page = (page + page_count - 1) % page_count;
+        dirty = true;
       } else if (input.kind == WindowInputKind::kPointerDown) {
         if (input.x >= window->size().width / 2) {
-          ++page;
-        } else if (page > 0) {
-          --page;
+          page = (page + 1) % page_count;
+        } else {
+          page = (page + page_count - 1) % page_count;
         }
+        dirty = true;
       } else if (input.kind == WindowInputKind::kDisplayChanged) {
+        window->DestroyFrame();
         layout = MakePageLayout(report, window->size());
+        auto resized_frame = window->CreateRgb565Frame();
+        if (!resized_frame.ok()) {
+          running = false;
+          break;
+        }
+        frame = *resized_frame;
         page = 0;
+        dirty = true;
       }
     }
-    if (!running) break;
-
-    const std::size_t page_count = layout.pages.size();
-    if (page_count == 0) break;
-    page %= page_count;
-    const int width = layout.width;
-    const int height = layout.height;
-    const std::vector<GLfloat>& vertices = layout.pages[page];
-
-    api.gl_viewport(0, 0, width, height);
-    api.gl_clear_color(0.015f, 0.025f, 0.05f, 1.0f);
-    api.gl_clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    api.gl_disable(GL_DEPTH_TEST);
-    api.gl_disable(GL_CULL_FACE);
-    api.gl_disable(GL_TEXTURE_2D);
-    api.gl_matrix_mode(GL_PROJECTION);
-    api.gl_load_identity();
-    api.gl_orthof(0.0f, static_cast<GLfloat>(width),
-             static_cast<GLfloat>(height), 0.0f, -1.0f, 1.0f);
-    api.gl_matrix_mode(GL_MODELVIEW);
-    api.gl_load_identity();
-    api.gl_color4f(0.45f, 1.0f, 0.68f, 1.0f);
-    api.gl_enable_client_state(GL_VERTEX_ARRAY);
-    api.gl_vertex_pointer(2, GL_FLOAT, 0, vertices.empty() ? nullptr : vertices.data());
-    api.gl_draw_arrays(GL_TRIANGLES, 0,
-                 static_cast<GLsizei>(vertices.size() / 2));
-    api.gl_disable_client_state(GL_VERTEX_ARRAY);
-    if (!context.Swap()) break;
-    User::After(100000);
+    if (running) User::After(100000);
   }
+  window->DestroyFrame();
   return KErrNone;
 }
 }  // namespace

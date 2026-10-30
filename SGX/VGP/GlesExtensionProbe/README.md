@@ -18,8 +18,14 @@ This avoids importing newer EUSER atomic ordinals that are absent from devices
 such as the Nokia 5320 RM-409 emulator image. Packaging success still does not
 prove runtime compatibility; verify launch on the target emulator/device.
 
-The report is paginated. Use left/right or up/down keys; tap the left/right
-half of the screen to change pages; Escape closes the app.
+The report is paginated. It is painted directly into the Window Server's
+RGB565 frame after the GL strings are collected, keeping memory use low on
+N95-class devices. Use left/right or up/down keys; tap the left/right half of
+the screen to change pages; Escape closes the app. Extension procedure lookups
+are attempted only when the corresponding extension is advertised. The IMG
+vertex-program extension intentionally exposes the ARB-suffixed program API
+names, so those exact entry points are checked when `GL_IMG_vertex_program` is
+present.
 
 **Important:** this reports extensions advertised by the active GLES context.
 It does not scan the protected `libgles_cm.dll` file for every embedded string.

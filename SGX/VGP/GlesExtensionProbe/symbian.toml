@@ -10,7 +10,7 @@ uid = 0xe0000839
 name = "GLES Extension Probe"
 vendor = "Renux"
 executable_name = "glesextprobe.exe"
-version = [1, 3, 1]
+version = [1, 3, 2]
 
 [application]
 caption = "GLES Extension Probe"
