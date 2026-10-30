@@ -1,0 +1,17 @@
+[project]
+architecture = "armv5t"
+name = "filmtvn95"
+kind = "e32-import-experiment"
+cmake_preset = "symbian-pic"
+uid3 = 0xe0000844
+
+[package]
+uid = 0xe0000845
+name = "FilmTV Render to Texture"
+vendor = "Renux"
+executable_name = "filmtvn95.exe"
+version = [1, 0, 0]
+
+[application]
+caption = "FilmTV"
+short_caption = "FilmTV"
