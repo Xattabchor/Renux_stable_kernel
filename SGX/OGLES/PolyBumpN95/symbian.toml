@@ -1,0 +1,17 @@
+[project]
+architecture = "armv5t"
+name = "polybumpn95"
+kind = "e32-import-experiment"
+cmake_preset = "symbian-pic"
+uid3 = 0xe0000842
+
+[package]
+uid = 0xe0000843
+name = "PolyBump DOT3 Lighting"
+vendor = "Renux"
+executable_name = "polybumpn95.exe"
+version = [1, 0, 0]
+
+[application]
+caption = "PolyBump DOT3"
+short_caption = "PolyBump"

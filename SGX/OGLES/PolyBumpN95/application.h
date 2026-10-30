@@ -1,0 +1,6 @@
+#ifndef POLY_BUMP_N95_APPLICATION_H_
+#define POLY_BUMP_N95_APPLICATION_H_
+
+int RunApplication();
+
+#endif  // POLY_BUMP_N95_APPLICATION_H_

@@ -1,0 +1,79 @@
+name: Build Symbian GLES 1.1 PolyBump for Nokia N95
+
+on:
+  push:
+    paths:
+      - "SGX/OGLES/PolyBumpN95/**"
+      - ".github/workflows/poly-bump-n95.yml"
+  pull_request:
+    paths:
+      - "SGX/OGLES/PolyBumpN95/**"
+      - ".github/workflows/poly-bump-n95.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Symbian CLI
+        run: python -m pip install "symbian-platform==0.3.0"
+      - name: Download and verify SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_archive="$RUNNER_TEMP/symbian-sdk-0.3.0-linux-x86_64.tar.gz"
+          curl --fail --location --retry 4 --retry-all-errors \
+            "https://github.com/hpnkv/symbian-platform/releases/download/v0.3.0/symbian-sdk-0.3.0-linux-x86_64.tar.gz" \
+            --output "$sdk_archive"
+          echo "9be830884a5fd1b9315ea1c11571810f7a50fa673851fa392bb397c6759fec3d  $sdk_archive" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/symbian-sdk"
+          tar -xzf "$sdk_archive" -C "$RUNNER_TEMP/symbian-sdk"
+          project="$RUNNER_TEMP/symbian-sdk/examples/PolyBumpN95"
+          mkdir -p "$project"
+          cp -a SGX/OGLES/PolyBumpN95/. "$project/"
+          echo "SYMBIAN_PROJECT=$project" >> "$GITHUB_ENV"
+      - name: Build ARMv5T E32 executable
+        id: build
+        shell: bash
+        run: |
+          set +e
+          log="$RUNNER_TEMP/polybumpn95-build.log"
+          symbian app build --project "$SYMBIAN_PROJECT" >"$log" 2>&1
+          status=$?
+          cat "$log"
+          echo "succeeded=$([[ $status -eq 0 ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Package SIS
+        if: steps.build.outputs.succeeded == 'true'
+        run: >-
+          symbian package
+          --project "$SYMBIAN_PROJECT"
+          --artifact "$SYMBIAN_PROJECT/.symbian/build/polybumpn95.exe"
+          --output "$RUNNER_TEMP/poly-bump-n95-sis"
+      - name: Upload SIS and package report
+        if: steps.build.outputs.succeeded == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Symbian-PolyBump-N95-SIS
+          path: |
+            ${{ runner.temp }}/poly-bump-n95-sis/polybumpn95.sis
+            ${{ runner.temp }}/poly-bump-n95-sis/package-report.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Symbian-PolyBump-N95-build-log
+          path: ${{ runner.temp }}/polybumpn95-build.log
+          if-no-files-found: ignore
+          retention-days: 30
+      - name: Require successful ARMv5T build
+        if: always()
+        run: test "${{ steps.build.outputs.succeeded }}" = true
