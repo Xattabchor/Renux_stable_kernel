@@ -17,9 +17,10 @@ feedback effect without external files or the desktop SDK framework.
 - ARMv5T, soft-float; no VFP instructions and no OpenGL ES 2.0 APIs.
 - Runtime GLES/EGL symbols are resolved from `libgles_cm.dll`.
 - EGL requests the native window color depth and a 16-bit depth buffer.
-- Requires the `GL_OES_framebuffer_object` extension. The app checks for GLES
-  1.1, the extension, and its entry points; if unavailable, it displays a
-  Symbian information note rather than failing silently.
+- Uses `GL_OES_framebuffer_object` when available, otherwise falls back to
+  texture-bound EGL 1.1 PBuffer surfaces. It checks the GLES and EGL runtime
+  capabilities and shows a Symbian information note only if neither path can
+  be created.
 
 Escape closes the application.
 

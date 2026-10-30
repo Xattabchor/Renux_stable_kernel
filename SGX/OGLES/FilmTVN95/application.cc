@@ -25,9 +25,12 @@ class GlesApi final {
  public:
   using EglChooseConfigFn = decltype(&eglChooseConfig);
   using EglCreateContextFn = decltype(&eglCreateContext);
+  using EglCreatePbufferSurfaceFn = decltype(&eglCreatePbufferSurface);
   using EglCreateWindowSurfaceFn = decltype(&eglCreateWindowSurface);
   using EglDestroyContextFn = decltype(&eglDestroyContext);
   using EglDestroySurfaceFn = decltype(&eglDestroySurface);
+  using EglBindTexImageFn = decltype(&eglBindTexImage);
+  using EglReleaseTexImageFn = decltype(&eglReleaseTexImage);
   using EglGetErrorFn = decltype(&eglGetError);
   using EglGetProcAddressFn = decltype(&eglGetProcAddress);
   using EglInitializeFn = decltype(&eglInitialize);
@@ -69,6 +72,7 @@ class GlesApi final {
     loaded_ = true;
     return Bind(&egl_choose_config, 1, "eglChooseConfig") &&
            Bind(&egl_create_context, 3, "eglCreateContext") &&
+           Bind(&egl_create_pbuffer_surface, 4, "eglCreatePbufferSurface") &&
            Bind(&egl_create_window_surface, 6, "eglCreateWindowSurface") &&
            Bind(&egl_destroy_context, 7, "eglDestroyContext") &&
            Bind(&egl_destroy_surface, 8, "eglDestroySurface") &&
@@ -79,6 +83,8 @@ class GlesApi final {
            Bind(&egl_make_current, 18, "eglMakeCurrent") &&
            Bind(&egl_swap_buffers, 22, "eglSwapBuffers") &&
            Bind(&egl_terminate, 23, "eglTerminate") &&
+           Bind(&egl_bind_tex_image, 173, "eglBindTexImage") &&
+           Bind(&egl_release_tex_image, 174, "eglReleaseTexImage") &&
            Bind(&gl_bind_texture, 29, "glBindTexture") &&
            Bind(&gl_clear, 31, "glClear") &&
            Bind(&gl_clear_color, 32, "glClearColor") &&
@@ -128,12 +134,15 @@ class GlesApi final {
   EglGetProcAddressFn egl_get_proc_address = nullptr;
   EglInitializeFn egl_initialize = nullptr;
   EglChooseConfigFn egl_choose_config = nullptr;
+  EglCreatePbufferSurfaceFn egl_create_pbuffer_surface = nullptr;
   EglCreateWindowSurfaceFn egl_create_window_surface = nullptr;
   EglCreateContextFn egl_create_context = nullptr;
   EglMakeCurrentFn egl_make_current = nullptr;
   EglSwapBuffersFn egl_swap_buffers = nullptr;
   EglDestroyContextFn egl_destroy_context = nullptr;
   EglDestroySurfaceFn egl_destroy_surface = nullptr;
+  EglBindTexImageFn egl_bind_tex_image = nullptr;
+  EglReleaseTexImageFn egl_release_tex_image = nullptr;
   EglTerminateFn egl_terminate = nullptr;
   GlBindTextureFn gl_bind_texture = nullptr;
   GlClearFn gl_clear = nullptr;
@@ -187,21 +196,36 @@ class Es1Context final {
       case EColor16M: buffer_bits = 24; break;
       default: buffer_bits = 32; break;
     }
-    const EGLint attributes[] = {
-        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
-        EGL_BUFFER_SIZE, buffer_bits,
-        EGL_DEPTH_SIZE, 16,
-        EGL_NONE};
     EGLConfig config = 0;
     EGLint count = 0;
-    if (!api_.egl_choose_config(display_, attributes, &config, 1, &count)) {
-      return Fail("eglChooseConfig");
+    const EGLint pbuffer_attributes[] = {
+        EGL_SURFACE_TYPE, EGL_WINDOW_BIT | EGL_PBUFFER_BIT,
+        EGL_BUFFER_SIZE, buffer_bits,
+        EGL_DEPTH_SIZE, 16,
+        EGL_BIND_TO_TEXTURE_RGB, EGL_TRUE,
+        EGL_NONE};
+    pbuffer_configured_ =
+        api_.egl_choose_config(display_, pbuffer_attributes, &config, 1, &count) &&
+        count > 0;
+    if (!pbuffer_configured_) {
+      // Prefer a config usable for both window and texture-bound pbuffer
+      // surfaces. If none exists, preserve the normal window/FBO path.
+      const EGLint window_attributes[] = {
+          EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+          EGL_BUFFER_SIZE, buffer_bits,
+          EGL_DEPTH_SIZE, 16,
+          EGL_NONE};
+      count = 0;
+      if (!api_.egl_choose_config(display_, window_attributes, &config, 1, &count)) {
+        return Fail("eglChooseConfig");
+      }
+      if (count == 0) {
+        error_ = "No EGL window config with native color depth and 16-bit depth";
+        Close();
+        return false;
+      }
     }
-    if (count == 0) {
-      error_ = "No EGL window config with native color depth and 16-bit depth";
-      Close();
-      return false;
-    }
+    if (pbuffer_configured_) pbuffer_config_ = config;
     surface_ = api_.egl_create_window_surface(
         display_, config,
         static_cast<EGLNativeWindowType>(window->NativeWindowHandle()), nullptr);
@@ -220,6 +244,55 @@ class Es1Context final {
     return Fail("eglSwapBuffers");
   }
 
+  bool pbuffer_configured() const { return pbuffer_configured_; }
+
+  EGLSurface CreatePbuffer(int size, std::string* error) {
+    if (!pbuffer_configured_) {
+      *error = "EGL has no window+pbuffer texture configuration";
+      return EGL_NO_SURFACE;
+    }
+    const EGLint attributes[] = {
+        EGL_WIDTH, size,
+        EGL_HEIGHT, size,
+        EGL_TEXTURE_FORMAT, EGL_TEXTURE_RGB,
+        EGL_TEXTURE_TARGET, EGL_TEXTURE_2D,
+        EGL_NONE};
+    const EGLSurface pbuffer = api_.egl_create_pbuffer_surface(
+        display_, pbuffer_config_, attributes);
+    if (pbuffer == EGL_NO_SURFACE) {
+      SetEglError("eglCreatePbufferSurface", error);
+    }
+    return pbuffer;
+  }
+
+  bool MakePbufferCurrent(EGLSurface pbuffer, std::string* error) {
+    if (api_.egl_make_current(display_, pbuffer, pbuffer, context_)) return true;
+    SetEglError("eglMakeCurrent(pbuffer)", error);
+    return false;
+  }
+
+  bool MakeWindowCurrent(std::string* error = nullptr) {
+    if (api_.egl_make_current(display_, surface_, surface_, context_)) return true;
+    if (error != nullptr) SetEglError("eglMakeCurrent(window)", error);
+    return false;
+  }
+
+  bool BindPbufferTexture(EGLSurface pbuffer, std::string* error) {
+    if (api_.egl_bind_tex_image(display_, pbuffer, EGL_BACK_BUFFER)) return true;
+    SetEglError("eglBindTexImage", error);
+    return false;
+  }
+
+  bool ReleasePbufferTexture(EGLSurface pbuffer, std::string* error) {
+    if (api_.egl_release_tex_image(display_, pbuffer, EGL_BACK_BUFFER)) return true;
+    SetEglError("eglReleaseTexImage", error);
+    return false;
+  }
+
+  void DestroyPbuffer(EGLSurface pbuffer) {
+    if (pbuffer != EGL_NO_SURFACE) api_.egl_destroy_surface(display_, pbuffer);
+  }
+
   void Close() {
     if (display_ != EGL_NO_DISPLAY) {
       if (context_ != EGL_NO_CONTEXT) {
@@ -233,13 +306,23 @@ class Es1Context final {
     display_ = EGL_NO_DISPLAY;
     surface_ = EGL_NO_SURFACE;
     context_ = EGL_NO_CONTEXT;
+    pbuffer_config_ = 0;
     initialized_ = false;
+    pbuffer_configured_ = false;
     api_.Close();
   }
   GlesApi& api() { return api_; }
   const std::string& error() const { return error_; }
 
  private:
+  void SetEglError(const char* stage, std::string* output) {
+    if (output == nullptr) return;
+    char code[16];
+    const EGLint value = api_.egl_get_error != nullptr ? api_.egl_get_error() : 0;
+    std::snprintf(code, sizeof(code), "0x%04x", static_cast<unsigned int>(value));
+    *output = std::string(stage) + " failed (EGL " + code + ")";
+  }
+
   bool Fail(const char* stage) {
     char code[16];
     const EGLint value = api_.egl_get_error != nullptr ? api_.egl_get_error() : 0;
@@ -252,7 +335,9 @@ class Es1Context final {
   EGLDisplay display_ = EGL_NO_DISPLAY;
   EGLSurface surface_ = EGL_NO_SURFACE;
   EGLContext context_ = EGL_NO_CONTEXT;
+  EGLConfig pbuffer_config_ = 0;
   bool initialized_ = false;
+  bool pbuffer_configured_ = false;
   std::string error_;
 };
 
@@ -372,6 +457,10 @@ bool CreateTargets(GlesApi& gl, FboApi& fbo, GLuint textures[2],
     if (fbo.status(GL_FRAMEBUFFER_OES) != GL_FRAMEBUFFER_COMPLETE_OES) {
       *error = "FilmTV framebuffer is incomplete on this GLES driver";
       fbo.bind(GL_FRAMEBUFFER_OES, 0);
+      fbo.remove(2, framebuffers);
+      gl.gl_delete_textures(2, textures);
+      textures[0] = textures[1] = 0;
+      framebuffers[0] = framebuffers[1] = 0;
       return false;
     }
   }
@@ -379,11 +468,48 @@ bool CreateTargets(GlesApi& gl, FboApi& fbo, GLuint textures[2],
   return true;
 }
 
-void RenderFilmTexture(GlesApi& gl, const FboApi& fbo,
-                       const GLuint framebuffers[2], const GLuint textures[2],
+bool CreatePbufferTargets(GlesApi& gl, Es1Context& context,
+                          GLuint textures[2], EGLSurface pbuffers[2],
+                          std::string* error) {
+  for (int i = 0; i < 2; ++i) {
+    textures[i] = MakeTargetTexture(gl);
+    pbuffers[i] = context.CreatePbuffer(kTextureSize, error);
+    if (pbuffers[i] == EGL_NO_SURFACE) return false;
+    gl.gl_bind_texture(GL_TEXTURE_2D, textures[i]);
+    if (!context.BindPbufferTexture(pbuffers[i], error)) return false;
+  }
+  return true;
+}
+
+void DestroyPbufferTargets(Es1Context& context, GlesApi& gl,
+                           GLuint textures[2], EGLSurface pbuffers[2]) {
+  context.MakeWindowCurrent();
+  for (int i = 0; i < 2; ++i) {
+    if (pbuffers[i] != EGL_NO_SURFACE) {
+      std::string ignored;
+      context.ReleasePbufferTexture(pbuffers[i], &ignored);
+      context.DestroyPbuffer(pbuffers[i]);
+      pbuffers[i] = EGL_NO_SURFACE;
+    }
+  }
+  if (textures[0] != 0 || textures[1] != 0) gl.gl_delete_textures(2, textures);
+  textures[0] = textures[1] = 0;
+}
+
+bool RenderFilmTexture(GlesApi& gl, Es1Context& context, const FboApi& fbo,
+                       bool use_fbo, const GLuint framebuffers[2],
+                       const EGLSurface pbuffers[2], const GLuint textures[2],
                        int current, int previous, unsigned int frame,
-                       float time) {
-  fbo.bind(GL_FRAMEBUFFER_OES, framebuffers[current]);
+                       float time, std::string* error) {
+  if (use_fbo) {
+    fbo.bind(GL_FRAMEBUFFER_OES, framebuffers[current]);
+  } else {
+    if (!context.MakePbufferCurrent(pbuffers[current], error)) return false;
+    if (!context.ReleasePbufferTexture(pbuffers[current], error)) {
+      context.MakeWindowCurrent();
+      return false;
+    }
+  }
   gl.gl_viewport(0, 0, kTextureSize, kTextureSize);
   Set2D(gl, kTextureSize, kTextureSize);
   gl.gl_disable(GL_DEPTH_TEST);
@@ -428,7 +554,14 @@ void RenderFilmTexture(GlesApi& gl, const FboApi& fbo,
   DrawCircle(gl, 0.73f * std::cos(time * 0.81f), -0.09f,
              0.07f, green, time);
   (void)aspect;
-  fbo.bind(GL_FRAMEBUFFER_OES, 0);
+  if (use_fbo) {
+    fbo.bind(GL_FRAMEBUFFER_OES, 0);
+  } else {
+    if (!context.MakeWindowCurrent(error)) return false;
+    gl.gl_bind_texture(GL_TEXTURE_2D, textures[current]);
+    if (!context.BindPbufferTexture(pbuffers[current], error)) return false;
+  }
+  return true;
 }
 
 void RenderTelevision(GlesApi& gl, const WindowSurface& window,
@@ -513,22 +646,28 @@ int Run(WindowSurface* window) {
     return KErrNotSupported;
   }
   const char* extensions = reinterpret_cast<const char*>(gl.gl_get_string(GL_EXTENSIONS));
-  if (!HasExtension(extensions, "GL_OES_framebuffer_object")) {
-    ShowFailure("FilmTV needs GL_OES_framebuffer_object");
-    return KErrNotSupported;
-  }
   FboApi fbo;
-  if (!fbo.Load(gl)) {
-    ShowFailure("FBO entry points unavailable via EGL");
-    return KErrNotSupported;
-  }
-
+  bool use_fbo = HasExtension(extensions, "GL_OES_framebuffer_object") &&
+                 fbo.Load(gl);
   GLuint textures[2] = {0, 0};
   GLuint framebuffers[2] = {0, 0};
+  EGLSurface pbuffers[2] = {EGL_NO_SURFACE, EGL_NO_SURFACE};
   std::string error;
-  if (!CreateTargets(gl, fbo, textures, framebuffers, &error)) {
-    ShowFailure(error.c_str());
-    return KErrNotSupported;
+
+  if (use_fbo && !CreateTargets(gl, fbo, textures, framebuffers, &error)) {
+    use_fbo = false;
+  }
+  if (!use_fbo) {
+    if (!context.pbuffer_configured()) {
+      ShowFailure("No FBO; EGL PBuffer fallback unavailable");
+      return KErrNotSupported;
+    }
+    error.clear();
+    if (!CreatePbufferTargets(gl, context, textures, pbuffers, &error)) {
+      DestroyPbufferTargets(context, gl, textures, pbuffers);
+      ShowFailure(error.empty() ? "EGL PBuffer setup failed" : error.c_str());
+      return KErrNotSupported;
+    }
   }
   gl.gl_tex_envf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
   gl.gl_enable_client_state(GL_VERTEX_ARRAY);
@@ -550,7 +689,12 @@ int Run(WindowSurface* window) {
     if (!running) break;
     const int current = static_cast<int>(frame & 1u);
     const int previous = 1 - current;
-    RenderFilmTexture(gl, fbo, framebuffers, textures, current, previous, frame, time);
+    if (!RenderFilmTexture(gl, context, fbo, use_fbo, framebuffers, pbuffers,
+                           textures, current, previous, frame, time, &error)) {
+      context.MakeWindowCurrent();
+      ShowFailure(error.empty() ? "FilmTV render-to-texture failed" : error.c_str());
+      break;
+    }
     RenderTelevision(gl, *window, textures[current], time);
     if (!context.Swap()) {
       ShowFailure(context.error().c_str());
@@ -561,9 +705,13 @@ int Run(WindowSurface* window) {
     if (time > 1000.0f) time -= 1000.0f;
     User::After(18000);
   }
-  fbo.bind(GL_FRAMEBUFFER_OES, 0);
-  fbo.remove(2, framebuffers);
-  gl.gl_delete_textures(2, textures);
+  if (use_fbo) {
+    fbo.bind(GL_FRAMEBUFFER_OES, 0);
+    fbo.remove(2, framebuffers);
+    gl.gl_delete_textures(2, textures);
+  } else {
+    DestroyPbufferTargets(context, gl, textures, pbuffers);
+  }
   return KErrNone;
 }
 }  // namespace
