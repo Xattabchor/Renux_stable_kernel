@@ -111,36 +111,36 @@ class SymbianGlesApi final {
       return false;
     }
     loaded_ = true;
-    // Ordinals are the Symbian GLES 1.1 Common ABI: the legacy driver exports
-    // EGL first, followed by GLES. Resolve only the entry points this probe uses.
+    // Combined EGL/GLES ordinals match SymbianSource opengles11u.def; do not
+    // substitute the differently numbered GLES-only libglesv1_cm table.
     return LoadFunction(&egl_choose_config, 1, "eglChooseConfig") &&
            LoadFunction(&egl_create_context, 3, "eglCreateContext") &&
            LoadFunction(&egl_create_window_surface, 6,
                         "eglCreateWindowSurface") &&
            LoadFunction(&egl_destroy_context, 7, "eglDestroyContext") &&
            LoadFunction(&egl_destroy_surface, 8, "eglDestroySurface") &&
-           LoadFunction(&egl_get_display, 15, "eglGetDisplay") &&
-           LoadFunction(&egl_get_error, 16, "eglGetError") &&
-           LoadFunction(&egl_get_proc_address, 17, "eglGetProcAddress") &&
-           LoadFunction(&egl_initialize, 18, "eglInitialize") &&
-           LoadFunction(&egl_make_current, 19, "eglMakeCurrent") &&
-           LoadFunction(&egl_swap_buffers, 24, "eglSwapBuffers") &&
-           LoadFunction(&egl_terminate, 25, "eglTerminate") &&
-           LoadFunction(&gl_clear, 62, "glClear") &&
-           LoadFunction(&gl_clear_color, 63, "glClearColor") &&
-           LoadFunction(&gl_color4f, 69, "glColor4f") &&
-           LoadFunction(&gl_disable, 83, "glDisable") &&
-           LoadFunction(&gl_disable_client_state, 84,
+           LoadFunction(&egl_get_display, 14, "eglGetDisplay") &&
+           LoadFunction(&egl_get_error, 15, "eglGetError") &&
+           LoadFunction(&egl_get_proc_address, 16, "eglGetProcAddress") &&
+           LoadFunction(&egl_initialize, 17, "eglInitialize") &&
+           LoadFunction(&egl_make_current, 18, "eglMakeCurrent") &&
+           LoadFunction(&egl_swap_buffers, 22, "eglSwapBuffers") &&
+           LoadFunction(&egl_terminate, 23, "eglTerminate") &&
+           LoadFunction(&gl_clear, 31, "glClear") &&
+           LoadFunction(&gl_clear_color, 32, "glClearColor") &&
+           LoadFunction(&gl_color4f, 38, "glColor4f") &&
+           LoadFunction(&gl_disable, 52, "glDisable") &&
+           LoadFunction(&gl_disable_client_state, 53,
                         "glDisableClientState") &&
-           LoadFunction(&gl_draw_arrays, 85, "glDrawArrays") &&
-           LoadFunction(&gl_enable_client_state, 88,
+           LoadFunction(&gl_draw_arrays, 54, "glDrawArrays") &&
+           LoadFunction(&gl_enable_client_state, 57,
                         "glEnableClientState") &&
-           LoadFunction(&gl_get_string, 101, "glGetString") &&
-           LoadFunction(&gl_load_identity, 113, "glLoadIdentity") &&
-           LoadFunction(&gl_matrix_mode, 121, "glMatrixMode") &&
-           LoadFunction(&gl_orthof, 129, "glOrthof") &&
-           LoadFunction(&gl_vertex_pointer, 162, "glVertexPointer") &&
-           LoadFunction(&gl_viewport, 163, "glViewport");
+           LoadFunction(&gl_get_string, 70, "glGetString") &&
+           LoadFunction(&gl_load_identity, 82, "glLoadIdentity") &&
+           LoadFunction(&gl_matrix_mode, 90, "glMatrixMode") &&
+           LoadFunction(&gl_orthof, 98, "glOrthof") &&
+           LoadFunction(&gl_vertex_pointer, 131, "glVertexPointer") &&
+           LoadFunction(&gl_viewport, 132, "glViewport");
   }
 
   void Close() {

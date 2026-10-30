@@ -132,46 +132,47 @@ class SymbianGlesApi final {
       return false;
     }
     loaded_ = true;
-    // Symbian GLES 1.1 Common ordinal table; EGL exports precede GLES exports.
+    // Combined EGL/GLES ordinals match SymbianSource opengles11u.def; do not
+    // substitute the differently numbered GLES-only libglesv1_cm table.
     return LoadFunction(&eglChooseConfig_fn, 1, "eglChooseConfig") &&
            LoadFunction(&eglCreateContext_fn, 3, "eglCreateContext") &&
            LoadFunction(&eglCreateWindowSurface_fn, 6, "eglCreateWindowSurface") &&
            LoadFunction(&eglDestroyContext_fn, 7, "eglDestroyContext") &&
            LoadFunction(&eglDestroySurface_fn, 8, "eglDestroySurface") &&
-           LoadFunction(&eglGetDisplay_fn, 15, "eglGetDisplay") &&
-           LoadFunction(&eglGetError_fn, 16, "eglGetError") &&
-           LoadFunction(&eglGetProcAddress_fn, 17, "eglGetProcAddress") &&
-           LoadFunction(&eglInitialize_fn, 18, "eglInitialize") &&
-           LoadFunction(&eglMakeCurrent_fn, 19, "eglMakeCurrent") &&
-           LoadFunction(&eglSwapBuffers_fn, 24, "eglSwapBuffers") &&
-           LoadFunction(&eglTerminate_fn, 25, "eglTerminate") &&
-           LoadFunction(&glBindTexture_fn, 60, "glBindTexture") &&
-           LoadFunction(&glClear_fn, 62, "glClear") &&
-           LoadFunction(&glClearColor_fn, 63, "glClearColor") &&
-           LoadFunction(&glColor4f_fn, 69, "glColor4f") &&
-           LoadFunction(&glCompressedTexImage2D_fn, 73, "glCompressedTexImage2D") &&
-           LoadFunction(&glCullFace_fn, 77, "glCullFace") &&
-           LoadFunction(&glDeleteTextures_fn, 78, "glDeleteTextures") &&
-           LoadFunction(&glDepthFunc_fn, 79, "glDepthFunc") &&
-           LoadFunction(&glDisable_fn, 83, "glDisable") &&
-           LoadFunction(&glDisableClientState_fn, 84, "glDisableClientState") &&
-           LoadFunction(&glDrawArrays_fn, 85, "glDrawArrays") &&
-           LoadFunction(&glDrawElements_fn, 86, "glDrawElements") &&
-           LoadFunction(&glEnable_fn, 87, "glEnable") &&
-           LoadFunction(&glEnableClientState_fn, 88, "glEnableClientState") &&
-           LoadFunction(&glGenTextures_fn, 98, "glGenTextures") &&
-           LoadFunction(&glGetError_fn, 99, "glGetError") &&
-           LoadFunction(&glGetString_fn, 101, "glGetString") &&
-           LoadFunction(&glLightfv_fn, 108, "glLightfv") &&
-           LoadFunction(&glLoadIdentity_fn, 113, "glLoadIdentity") &&
-           LoadFunction(&glLoadMatrixf_fn, 114, "glLoadMatrixf") &&
-           LoadFunction(&glMaterialfv_fn, 118, "glMaterialfv") &&
-           LoadFunction(&glNormalPointer_fn, 128, "glNormalPointer") &&
-           LoadFunction(&glTexCoordPointer_fn, 151, "glTexCoordPointer") &&
-           LoadFunction(&glTexEnvf_fn, 152, "glTexEnvf") &&
-           LoadFunction(&glTexParameterf_fn, 157, "glTexParameterf") &&
-           LoadFunction(&glVertexPointer_fn, 162, "glVertexPointer") &&
-           LoadFunction(&glViewport_fn, 163, "glViewport");
+           LoadFunction(&eglGetDisplay_fn, 14, "eglGetDisplay") &&
+           LoadFunction(&eglGetError_fn, 15, "eglGetError") &&
+           LoadFunction(&eglGetProcAddress_fn, 16, "eglGetProcAddress") &&
+           LoadFunction(&eglInitialize_fn, 17, "eglInitialize") &&
+           LoadFunction(&eglMakeCurrent_fn, 18, "eglMakeCurrent") &&
+           LoadFunction(&eglSwapBuffers_fn, 22, "eglSwapBuffers") &&
+           LoadFunction(&eglTerminate_fn, 23, "eglTerminate") &&
+           LoadFunction(&glBindTexture_fn, 29, "glBindTexture") &&
+           LoadFunction(&glClear_fn, 31, "glClear") &&
+           LoadFunction(&glClearColor_fn, 32, "glClearColor") &&
+           LoadFunction(&glColor4f_fn, 38, "glColor4f") &&
+           LoadFunction(&glCompressedTexImage2D_fn, 42, "glCompressedTexImage2D") &&
+           LoadFunction(&glCullFace_fn, 46, "glCullFace") &&
+           LoadFunction(&glDeleteTextures_fn, 47, "glDeleteTextures") &&
+           LoadFunction(&glDepthFunc_fn, 48, "glDepthFunc") &&
+           LoadFunction(&glDisable_fn, 52, "glDisable") &&
+           LoadFunction(&glDisableClientState_fn, 53, "glDisableClientState") &&
+           LoadFunction(&glDrawArrays_fn, 54, "glDrawArrays") &&
+           LoadFunction(&glDrawElements_fn, 55, "glDrawElements") &&
+           LoadFunction(&glEnable_fn, 56, "glEnable") &&
+           LoadFunction(&glEnableClientState_fn, 57, "glEnableClientState") &&
+           LoadFunction(&glGenTextures_fn, 67, "glGenTextures") &&
+           LoadFunction(&glGetError_fn, 68, "glGetError") &&
+           LoadFunction(&glGetString_fn, 70, "glGetString") &&
+           LoadFunction(&glLightfv_fn, 77, "glLightfv") &&
+           LoadFunction(&glLoadIdentity_fn, 82, "glLoadIdentity") &&
+           LoadFunction(&glLoadMatrixf_fn, 83, "glLoadMatrixf") &&
+           LoadFunction(&glMaterialfv_fn, 87, "glMaterialfv") &&
+           LoadFunction(&glNormalPointer_fn, 97, "glNormalPointer") &&
+           LoadFunction(&glTexCoordPointer_fn, 120, "glTexCoordPointer") &&
+           LoadFunction(&glTexEnvf_fn, 121, "glTexEnvf") &&
+           LoadFunction(&glTexParameterf_fn, 126, "glTexParameterf") &&
+           LoadFunction(&glVertexPointer_fn, 131, "glVertexPointer") &&
+           LoadFunction(&glViewport_fn, 132, "glViewport");
   }
 
   void Close() {
