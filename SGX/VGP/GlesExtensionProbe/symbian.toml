@@ -1,5 +1,5 @@
 [project]
-architecture = "armv6"
+architecture = "armv5t"
 name = "glesextprobe"
 kind = "e32-import-experiment"
 cmake_preset = "symbian-pic"

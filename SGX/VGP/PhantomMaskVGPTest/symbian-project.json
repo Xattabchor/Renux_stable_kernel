@@ -2,7 +2,7 @@
   "preferences": {
     "name": "phantommask",
     "uid3": 3758098486,
-    "architecture": "armv6",
+    "architecture": "armv5t",
     "timer_tasks": false,
     "ide": "intellij",
     "port": 24702

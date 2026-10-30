@@ -2,7 +2,7 @@
   "preferences": {
     "name": "glesextprobe",
     "uid3": 3758098488,
-    "architecture": "armv6",
+    "architecture": "armv5t",
     "timer_tasks": false,
     "ide": "intellij",
     "port": 24703

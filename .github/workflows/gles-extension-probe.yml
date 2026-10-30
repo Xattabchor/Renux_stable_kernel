@@ -34,7 +34,7 @@ jobs:
           mkdir -p "$project"
           cp -a SGX/VGP/GlesExtensionProbe/. "$project/"
           echo "SYMBIAN_PROJECT=$project" >> "$GITHUB_ENV"
-      - name: Build ARMv6 E32 executable
+      - name: Build ARMv5T E32 executable
         id: build
         shell: bash
         run: |
@@ -76,6 +76,6 @@ jobs:
             git commit -m 'Record GLES extension probe build diagnostics'
             git push origin "$GITHUB_REF_NAME"
           fi
-      - name: Require successful ARMv6 build
+      - name: Require successful ARMv5T build
         if: always()
         run: test "${{ steps.build.outputs.succeeded }}" = true
