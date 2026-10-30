@@ -13,6 +13,11 @@ by `glGetString(GL_EXTENSIONS)`, and the result of the driver's
 config requests the color depth reported by the native Symbian window, with 16-bit depth, and avoids
 ES2-only attributes/import DLLs.
 
+The project selects the SDK's `LegacyEka2` runtime profile for older EKA2 ROMs.
+This avoids importing newer EUSER atomic ordinals that are absent from devices
+such as the Nokia 5320 RM-409 emulator image. Packaging success still does not
+prove runtime compatibility; verify launch on the target emulator/device.
+
 The report is paginated. Use left/right or up/down keys; tap the left/right
 half of the screen to change pages; Escape closes the app.
 
