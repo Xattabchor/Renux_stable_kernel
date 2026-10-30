@@ -270,8 +270,7 @@ struct FboApi {
 
   template <typename Function>
   bool Resolve(GlesApi& gl, Function* out, const char* name) {
-    const __eglMustCastToProperFunctionPointerType address =
-        gl.egl_get_proc_address(name);
+    const auto address = gl.egl_get_proc_address(name);
     if (address == nullptr) return false;
     *out = reinterpret_cast<Function>(address);
     return true;
