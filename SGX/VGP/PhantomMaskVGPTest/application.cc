@@ -239,17 +239,17 @@ class LegacyEs1Context final {
       return Fail("eglInitialize", api_.eglGetError_fn());
     }
     initialized_ = true;
-    // Match the working Quake III Symbian EGL 1.1 setup for N95: 16-bit color,
-    // a 16-bit depth buffer, and no EGL 1.2 renderable-type/client-version tags.
+    // Request 32-bit color and 16-bit depth without EGL 1.2
+    // renderable-type/client-version tags, preserving EGL 1.1 compatibility.
     const EGLint attributes[] = {EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
-                                 EGL_BUFFER_SIZE, 16, EGL_DEPTH_SIZE, 16,
+                                 EGL_BUFFER_SIZE, 32, EGL_DEPTH_SIZE, 16,
                                  EGL_NONE};
     EGLConfig config = 0;
     EGLint count = 0;
     if (!api_.eglChooseConfig_fn(display_, attributes, &config, 1, &count)) {
       return Fail("eglChooseConfig", api_.eglGetError_fn());
     }
-    if (count == 0) return Fail("no 16-bit EGL config", EGL_SUCCESS);
+    if (count == 0) return Fail("no 32-bit EGL color config", EGL_SUCCESS);
     surface_ = api_.eglCreateWindowSurface_fn(
         display_, config,
         static_cast<EGLNativeWindowType>(window->NativeWindowHandle()), nullptr);

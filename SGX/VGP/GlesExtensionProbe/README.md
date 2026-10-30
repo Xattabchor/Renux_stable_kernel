@@ -8,7 +8,7 @@ the same compatibility path used by the Quake III Symbian port. It displays
 `GL_VERSION`, `GL_RENDERER`, `GL_VENDOR`, every space-delimited token returned
 by `glGetString(GL_EXTENSIONS)`, and the result of the driver's
 `eglGetProcAddress` for IMG VGP and OES matrix-palette entry points. The EGL
-config requests the N95-style 16-bit color and depth buffers and avoids
+config requests a 32-bit color buffer with 16-bit depth and avoids
 ES2-only attributes/import DLLs.
 
 The report is paginated. Use left/right or up/down keys; tap the left/right

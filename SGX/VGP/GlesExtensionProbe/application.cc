@@ -226,11 +226,11 @@ class Es1WindowContext final {
     }
     initialized_ = true;
 
-    // Match Quake III's Symbian path: N95 uses a 16-bit screen and needs a
-    // 16-bit depth buffer. EGL 1.1 ignores the later renderable-type attribute.
+    // Request 32-bit color with a 16-bit depth buffer. EGL 1.1 ignores the
+    // later renderable-type attribute.
     const EGLint config_attributes[] = {
         EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
-        EGL_BUFFER_SIZE, 16,
+        EGL_BUFFER_SIZE, 32,
         EGL_DEPTH_SIZE, 16,
         EGL_NONE};
     EGLConfig config = 0;
@@ -239,7 +239,7 @@ class Es1WindowContext final {
                                 &config_count)) {
       return Fail("eglChooseConfig", api_.egl_get_error());
     }
-    if (config_count == 0) return Fail("no 16-bit EGL window config", EGL_SUCCESS);
+    if (config_count == 0) return Fail("no 32-bit EGL color config", EGL_SUCCESS);
 
     surface_ = api_.egl_create_window_surface(
         display_, config,
