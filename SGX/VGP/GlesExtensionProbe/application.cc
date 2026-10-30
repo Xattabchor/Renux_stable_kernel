@@ -66,7 +66,7 @@ const Glyph& FindGlyph(char character) {
 }
 
 // Symbian 9.x phones such as the N95 expose the combined GLES 1.1/EGL
-// implementation from libGLES_CM.dll. Keep these calls dynamically resolved:
+// implementation from libgles_cm.dll. Keep these calls dynamically resolved:
 // linking the newer SDK's separate libegl.dll/libglesv1_cm.dll imports prevents
 // the legacy phone's loader from starting the app at all.
 class SymbianGlesApi final {
@@ -103,9 +103,9 @@ class SymbianGlesApi final {
   ~SymbianGlesApi() { Close(); }
 
   bool Load() {
-    const TInt result = library_.Load(_L("libGLES_CM.dll"));
+    const TInt result = library_.Load(_L("libgles_cm.dll"));
     if (result != KErrNone) {
-      error_message_ = "RLibrary.Load(libGLES_CM.dll) failed (" +
+      error_message_ = "RLibrary.Load(libgles_cm.dll) failed (" +
                        std::to_string(result) + ")";
       return false;
     }
@@ -180,7 +180,7 @@ class SymbianGlesApi final {
   bool LoadFunction(Function* output, TInt ordinal, const char* name) {
     const TLibraryFunction address = library_.Lookup(ordinal);
     if (address == nullptr) {
-      error_message_ = std::string("libGLES_CM.dll missing ") + name +
+      error_message_ = std::string("libgles_cm.dll missing ") + name +
                        " at ordinal " + std::to_string(ordinal);
       Close();
       return false;

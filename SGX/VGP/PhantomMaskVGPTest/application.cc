@@ -76,7 +76,7 @@ struct ShCoefficients {
 };
 
 // Nokia Symbian 9.x firmware exposes its EGL 1.1 and GLES 1.1 entry points
-// through libGLES_CM.dll. Load that combined driver dynamically instead of
+// through libgles_cm.dll. Load that combined driver dynamically instead of
 // importing the newer SDK's separate libegl.dll/libglesv1_cm.dll proxies.
 class SymbianGlesApi final {
  public:
@@ -124,9 +124,9 @@ class SymbianGlesApi final {
 #undef GLES_FN
 
   bool Load() {
-    const TInt result = library_.Load(_L("libGLES_CM.dll"));
+    const TInt result = library_.Load(_L("libgles_cm.dll"));
     if (result != KErrNone) {
-      error_ = "RLibrary.Load(libGLES_CM.dll) failed (" +
+      error_ = "RLibrary.Load(libgles_cm.dll) failed (" +
                std::to_string(result) + ")";
       return false;
     }
@@ -192,7 +192,7 @@ class SymbianGlesApi final {
   bool LoadFunction(Function* output, TInt ordinal, const char* name) {
     const TLibraryFunction address = library_.Lookup(ordinal);
     if (address == nullptr) {
-      error_ = std::string("libGLES_CM.dll missing ") + name + " at ordinal " +
+      error_ = std::string("libgles_cm.dll missing ") + name + " at ordinal " +
                std::to_string(ordinal);
       Close();
       return false;
