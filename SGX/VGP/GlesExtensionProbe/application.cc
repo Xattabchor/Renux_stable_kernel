@@ -639,8 +639,15 @@ int RunWindow(WindowSurface* window) {
 
 int RunApplication() {
   WindowSurface window;
-  if (!window.Open("GLES Extension Probe").ok()) {
-    return KErrNotSupported;
+  // Older Symbian Window Servers may reject the SDK helper's AppArc task-name
+  // registration. The probe only needs a visible window, so omit the optional
+  // task caption and avoid that compatibility-sensitive SetName call.
+  const auto opened = window.Open();
+  if (!opened.ok()) {
+    _LIT(KProbeWindowOpenFailed, "GLES probe window open failed");
+    User::InfoPrint(KProbeWindowOpenFailed);
+    User::After(2000000);
+    return KErrNone;
   }
   return RunWindow(&window);
 }
