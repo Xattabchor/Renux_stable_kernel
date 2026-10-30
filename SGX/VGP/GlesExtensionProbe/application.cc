@@ -1,6 +1,7 @@
 #include "application.h"
 
 #include <e32std.h>
+#include <w32std.h>
 #include <EGL/egl.h>
 #include <GLES/gl.h>
 
@@ -226,11 +227,26 @@ class Es1WindowContext final {
     }
     initialized_ = true;
 
-    // Request 32-bit color with a 16-bit depth buffer. EGL 1.1 ignores the
-    // later renderable-type attribute.
+    // Match EGL's color-buffer request to the native window's display mode,
+    // as in Quake III's Symbian path. The N95 commonly reports EColor64K.
+    EGLint color_buffer_bits = 32;
+    switch (static_cast<RWindow*>(window->NativeWindowHandle())->DisplayMode()) {
+      case EColor4K:
+        color_buffer_bits = 12;
+        break;
+      case EColor64K:
+        color_buffer_bits = 16;
+        break;
+      case EColor16M:
+        color_buffer_bits = 24;
+        break;
+      default:
+        color_buffer_bits = 32;
+        break;
+    }
     const EGLint config_attributes[] = {
         EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
-        EGL_BUFFER_SIZE, 32,
+        EGL_BUFFER_SIZE, color_buffer_bits,
         EGL_DEPTH_SIZE, 16,
         EGL_NONE};
     EGLConfig config = 0;
@@ -239,7 +255,7 @@ class Es1WindowContext final {
                                 &config_count)) {
       return Fail("eglChooseConfig", api_.egl_get_error());
     }
-    if (config_count == 0) return Fail("no 32-bit EGL color config", EGL_SUCCESS);
+    if (config_count == 0) return Fail("no EGL config matching native display depth", EGL_SUCCESS);
 
     surface_ = api_.egl_create_window_surface(
         display_, config,

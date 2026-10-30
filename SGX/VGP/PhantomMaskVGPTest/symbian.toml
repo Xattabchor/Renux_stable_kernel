@@ -10,7 +10,7 @@ uid = 0xe0000837
 name = "PhantomMask"
 vendor = "Renux"
 executable_name = "PhantomMask.exe"
-version = [0, 2, 0]
+version = [0, 3, 0]
 
 [application]
 caption = "PhantomMask"

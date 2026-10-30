@@ -1,6 +1,7 @@
 #include "application.h"
 
 #include <e32std.h>
+#include <w32std.h>
 #include <EGL/egl.h>
 #include <GLES/gl.h>
 
@@ -239,17 +240,32 @@ class LegacyEs1Context final {
       return Fail("eglInitialize", api_.eglGetError_fn());
     }
     initialized_ = true;
-    // Request 32-bit color and 16-bit depth without EGL 1.2
-    // renderable-type/client-version tags, preserving EGL 1.1 compatibility.
+    // Match Quake III and the Symbian EGL guidance: request the color depth
+    // reported by the native RWindow, while keeping EGL 1.1 attributes only.
+    EGLint color_buffer_bits = 32;
+    switch (static_cast<RWindow*>(window->NativeWindowHandle())->DisplayMode()) {
+      case EColor4K:
+        color_buffer_bits = 12;
+        break;
+      case EColor64K:
+        color_buffer_bits = 16;
+        break;
+      case EColor16M:
+        color_buffer_bits = 24;
+        break;
+      default:
+        color_buffer_bits = 32;
+        break;
+    }
     const EGLint attributes[] = {EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
-                                 EGL_BUFFER_SIZE, 32, EGL_DEPTH_SIZE, 16,
-                                 EGL_NONE};
+                                 EGL_BUFFER_SIZE, color_buffer_bits,
+                                 EGL_DEPTH_SIZE, 16, EGL_NONE};
     EGLConfig config = 0;
     EGLint count = 0;
     if (!api_.eglChooseConfig_fn(display_, attributes, &config, 1, &count)) {
       return Fail("eglChooseConfig", api_.eglGetError_fn());
     }
-    if (count == 0) return Fail("no 32-bit EGL color config", EGL_SUCCESS);
+    if (count == 0) return Fail("no EGL config matching native display depth", EGL_SUCCESS);
     surface_ = api_.eglCreateWindowSurface_fn(
         display_, config,
         static_cast<EGLNativeWindowType>(window->NativeWindowHandle()), nullptr);
