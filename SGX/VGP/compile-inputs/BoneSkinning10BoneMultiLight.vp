@@ -1,0 +1,401 @@
+!!IMGvp1.0
+# ============================================================================
+# 10-bone skinning + full 8-light model (1 directional + ambient + 3 spot +
+# 4 omni) + hand fog. Third generation of this family:
+#   bone_skinning_extended.vp     - 18 bones, 2 lights  - array size NEVER
+#                                    tested, likely broken (single bone[54])
+#   bone_skinning_multilight.vp   - 16 bones, 8 lights  - CONFIRMED broken,
+#                                    single bone[48] array exceeds the real
+#                                    per-pool ARL-array limit
+#   this file                     - 10 bones, 8 lights  - built from two
+#                                    numbers the compiler itself produced,
+#                                    not from the ARB-minimum assumption the
+#                                    first two files relied on. The bone
+#                                    array's 10-bone cap is independently
+#                                    confirmed (direct trial, 11th bone
+#                                    failed). This file's local[]-based
+#                                    light/fog layout is the logical fix
+#                                    for a confirmed env[] overflow in an
+#                                    earlier draft (see below) - 136
+#                                    instructions - but THIS corrected
+#                                    layout has not itself been separately
+#                                    run through VGPCompiler.exe yet.
+#
+# ---- what changed, and why this is the first file in the family built on
+# confirmed numbers instead of an ARB-spec-minimum assumption ----
+# Three real compiler runs (not this thread's earlier guesswork) found:
+#   1. "Array index for Env/Local Params is out of range (16), max is 16" -
+#      a PARAM array using ARL (relative/computed-index) addressing can
+#      pull AT MOST 16 elements from a single pool (local OR env) in one
+#      range reference within its initializer. Confirmed by a direct
+#      overflow error on an 11-bone, single-pool array.
+#   2. A single PARAM array CAN combine a local range and an env range in
+#      one initializer - {program.local[0..15], program.env[0..15]} (32
+#      elements total) compiled and ran through VGPCompiler.exe without
+#      error (confirmed on a separate, quaternion-based skinning shader,
+#      209 total instructions for that file). For a 3-row affine matrix,
+#      (1)+(2) cap this file's combined array at floor(32/3) = 10 bones -
+#      exactly the split used below (16 rows in local, 14 in env).
+#   3. A FLAT (non-ARL, compile-time-constant-index) reference into env[]
+#      placed right after this file's bone array - program.env[14] through
+#      program.env[38] for lights/fog, in an earlier draft of this file -
+#      was REJECTED by the compiler at program.env[17]. That rejection is
+#      the confirmed part. The fix below - moving the exact same data to
+#      program.local[16..40] (flat references, right after the bone
+#      array's own local[0..15]) - is the logical correction, NOT itself
+#      independently re-run through VGPCompiler.exe yet (see CONFIDENCE
+#      LEVELS below). The finding this file is actually built on is: env[]'s
+#      own usable depth is far smaller than local[]'s - see CONFIDENCE
+#      LEVELS below for the one-register ambiguity in exactly where env[]'s
+#      boundary sits, and reference doc section 5.1 for the full writeup.
+#
+# ---- bones: 10, using the confirmed combined-array technique ----
+# PARAM bone[30] = { program.local[0..15], program.env[0..13] } - 16 from
+# local (full), 14 from env (under its own 16-per-reference ARL cap, only
+# as many as 10 bones actually need). Blend code is byte-for-byte the same
+# 4-influence ARL+DP4x3+MUL+DP3x3+MUL pattern used at 16 and 18 bones -
+# instruction cost tracks influences per vertex (fixed at 4), never
+# palette depth, so nothing here changed except the PARAM declaration and
+# how many rows it draws from which pool.
+#
+# ---- lighting/fog: SAME MODEL as bone_skinning_multilight.vp, DIFFERENT
+# REGISTER POOL than this file's own first draft ----
+# Same lighting model, same simplifications as the 16-bone sibling (see
+# that file for the full write-up): diffuse+ambient only, inverse-square
+# attenuation (reusing the same RSQ that normalizes the light vector),
+# linear host-precomputed spot falloff instead of POW, lighting computed
+# in object/world space against `skinned` rather than eye space.
+#
+# This file's FIRST draft kept lights/fog as flat program.env[14..38]
+# reads, on the theory that the 16-per-reference cap found in finding (1)
+# above was specific to ARL-indexed array initializers and wouldn't bound
+# ordinary flat program.env[N] reads at a compile-time-constant N. That
+# theory was WRONG: the compiler rejected program.env[17] in that draft
+# (finding 3 above). Lights/fog were moved to program.local[16..40]
+# instead - flat references, same structural access pattern, different
+# pool - and that version is what's below. The two pools are NOT
+# symmetric: local[]'s flat depth is confirmed to at least local[40],
+# while env[]'s flat depth tops out in the 16-17 range. See reference doc
+# section 5.1 for the three-part breakdown of what this does and doesn't
+# imply for the ARL bone-array cap specifically.
+#
+# ---- state.matrix.mvp / state.matrix.modelview ----
+# Still GL-matrix-stack state bindings, not env[]/local[] uploads - same
+# as every other file in this family. Unaffected by any of the above;
+# they never competed with the bone array or the light params for
+# register space, because they are not addressed through
+# program.env[]/program.local[] at all.
+#
+# Target: VGPCompiler.exe -i<this file> -o<out> -t -target=generic
+#
+# CONFIDENCE LEVELS:
+#   CONFIRMED BY COMPILER  The 16-per-pool-reference ARL array cap; the
+#            combined local+env single-array technique; >=209 instructions
+#            compiling; that the EARLIER env[14..38] draft of this file's
+#            light/fog block was rejected at program.env[17].
+#   NOT YET INDEPENDENTLY CONFIRMED  That THIS file - the local[16..40]
+#            version below - has itself been re-run through VGPCompiler.exe
+#            and produced a .bin. It is the logical fix for the env[17]
+#            rejection and every other change in this file is independently
+#            verified (register non-overlap, 136-instruction count, no
+#            stray source .xyz left), but no separate pass/fail report for
+#            this exact corrected file has been given yet. Treat it as
+#            "should compile" until that's confirmed, not as "compiled."
+#   CONFIRMED BY COMPILER, EXACT BOUNDARY UNRESOLVED  env[]'s own flat-
+#            access depth. The failing declaration in this file's first
+#            draft was program.env[17], which reads as "0..16 valid, 17
+#            is the first that isn't" (depth 17) - but the OLDER "out of
+#            range (16), max is 16" error from finding (1) reads as
+#            "0..15 valid" (depth 16). The two don't obviously reconcile
+#            (different access pattern - ARL array vs flat reference - so
+#            they may just be different limits that happen to collide
+#            near the same number) and this file does not have the raw
+#            verbatim compiler text for the env[17] rejection, only the
+#            fact of which declaration failed. Treat env[]'s flat depth as
+#            "16 or 17, not more precisely known" until the literal error
+#            text turns up.
+#   HIGH     Every opcode used, PARAM/TEMP/ATTRIB/ADDRESS grammar: same as
+#            the already-HIGH items in both sibling files.
+#   HIGH     Explicit `.xyz`-style identity swizzles on a SOURCE operand
+#            (reading a register that already holds exactly that many
+#            components) are incompatible with this compiler - e.g.
+#            `t.xyz` as a source was rejected, `t` (bare) was not. Only
+#            SOURCE operands were ever affected; destination write masks
+#            (`acc.xyz`, `result.color.xyz`, etc.) are untouched throughout
+#            this file and compile fine. Confirmed by this file actually
+#            needing and getting that change everywhere it applied -  not
+#            confirmed by a literal compiler error message, since none was
+#            kept. See reference doc section 4.4.
+#   MEDIUM   ARL + relative array indexing is now confirmed COMPILER-real
+#            (accepted, with a known size cap) - whether it is HARDWARE-
+#            real on physical VGP silicon, not just the compiler's own
+#            validation pass, is still untested on a real device.
+#   DESIGN CHOICE  Inverse-square attenuation, linear spot falloff,
+#            object/world-space lighting - same deliberate trade-offs as
+#            the 16-bone sibling, unchanged here.
+#   GUESS    vertex.attrib[1]/[7] for weight/index - still unconfirmed
+#            slot numbers (reference doc section 7).
+#   OPEN     Whether a single pool can supply more than 16 elements via
+#            multiple range references in one ARL array initializer
+#            (would allow more than 10 affine-matrix bones without
+#            switching to a 2-row-per-bone representation). Untested
+#            either way - see reference doc section 5.1/7.
+#   OPEN     local[]'s true flat-access ceiling past the confirmed
+#            local[40]. Also untested.
+#   CONFIRMED-INCOMPATIBLE  OPTION IMG_user_clipping - any shader writing
+#            result.position by hand can't use it (reference doc 10.4).
+#
+# REGISTER LAYOUT:
+#   local[]  0..15   bone array, part 1 (full 16 - the pool's per-
+#                     reference ARL cap)                                 16
+#   local[] 16..18   directional direction/color + ambient               3
+#   local[] 19..30   three spots: pos, color, dir, fall                  12
+#   local[] 31..38   four omni lights: pos, color                          8
+#   local[] 39..40   fog color and parameters                              2
+#   local[] 41..?    unknown - local[40] is the deepest flat local[]
+#                     reference actually tested; headroom past it is an
+#                     open question, not an established "unused" range
+#   env[]    0..13   bone array, part 2 (14 of its own ARL-reference cap,
+#                     only as many as 10 bones need: 30 total - 16 = 14)  14
+#   env[]   14..?    NOT safely "2 more entries free": this file's own
+#                     first draft put ordinary data at env[14] and
+#                     env[15] without the compiler objecting, then failed
+#                     at env[17] - so depth is at least 16, maybe 17, see
+#                     CONFIDENCE LEVELS above. Left unused here because
+#                     the light/fog block was moved to local[] as one
+#                     unit rather than hand-packed into these 2-3 leftover
+#                     env[] slots.
+#   NOTE: state.matrix.mvp / state.matrix.modelview are NOT in this
+#         table - GL matrix-stack state, not program.env[]/program.local[]
+#         uploads.
+#
+#   Host precompute required (unchanged from the 16-bone sibling):
+#     spot fall.x = 1 / (cos(innerAngle) - cos(outerAngle))
+#     spot fall.y = -cos(outerAngle) * fall.x
+#     fog params as established; all direction vectors pre-normalized
+# ============================================================================
+
+ATTRIB iPos      = vertex.position;
+ATTRIB iNormal   = vertex.normal;
+ATTRIB iWeight   = vertex.attrib[1];    # GUESS confidence - up to 4 blend weights
+ATTRIB iIndex    = vertex.attrib[7];    # GUESS confidence - matching bone indices (as floats)
+ATTRIB iTexCoord = vertex.texcoord[0];  # HIGH confidence passthrough
+
+ADDRESS A0;
+
+# ---- bone array: CONFIRMED combined-pool technique, 10 bones * 3 rows = 30 ----
+PARAM bone[30] = { program.local[0..15], program.env[0..13] };
+
+# ---- camera: GL matrix stack, not an upload ----
+PARAM mvp[4]       = { state.matrix.mvp };        # not env[]/local[] - see header
+PARAM modelview[4] = { state.matrix.modelview };  # not env[]/local[] - fog eye-depth only
+
+# ---- lights + fog: flat local[] reads, starting right after the bone array ----
+PARAM dDir    = program.local[16];   # directional light direction, normalized, points AT light
+PARAM dColor  = program.local[17];
+PARAM ambient = program.local[18];
+
+PARAM s0Pos  = program.local[19];  PARAM s0Color = program.local[20];
+PARAM s0Dir  = program.local[21];  PARAM s0Fall  = program.local[22];
+PARAM s1Pos  = program.local[23];  PARAM s1Color = program.local[24];
+PARAM s1Dir  = program.local[25];  PARAM s1Fall  = program.local[26];
+PARAM s2Pos  = program.local[27];  PARAM s2Color = program.local[28];
+PARAM s2Dir  = program.local[29];  PARAM s2Fall  = program.local[30];
+
+PARAM o0Pos  = program.local[31];  PARAM o0Color = program.local[32];
+PARAM o1Pos  = program.local[33];  PARAM o1Color = program.local[34];
+PARAM o2Pos  = program.local[35];  PARAM o2Color = program.local[36];
+PARAM o3Pos  = program.local[37];  PARAM o3Color = program.local[38];
+
+PARAM fogColor  = program.local[39];
+PARAM fogParams = program.local[40];   # .x = -1/(end-start), .y = end/(end-start)
+
+TEMP acc, naccum, t, tn, skinned, normal, nlen;
+TEMP eyeZ, fog, delta;
+TEMP lit;                        # running lit-color accumulator, all 8 lights
+TEMP lvec, ldir, distSq;         # reused scratch, every spot/omni light block
+TEMP ndotl, spotfac, atten;      # reused scratch, every light block
+
+# ---- influence 0 ----
+ARL A0.x, iIndex.x;
+DP4 t.x,  bone[A0.x + 0], iPos;
+DP4 t.y,  bone[A0.x + 1], iPos;
+DP4 t.z,  bone[A0.x + 2], iPos;
+MUL acc.xyz, t, iWeight.x;
+DP3 tn.x, bone[A0.x + 0], iNormal;
+DP3 tn.y, bone[A0.x + 1], iNormal;
+DP3 tn.z, bone[A0.x + 2], iNormal;
+MUL naccum.xyz, tn, iWeight.x;
+
+# ---- influence 1 ----
+ARL A0.x, iIndex.y;
+DP4 t.x,  bone[A0.x + 0], iPos;
+DP4 t.y,  bone[A0.x + 1], iPos;
+DP4 t.z,  bone[A0.x + 2], iPos;
+MAD acc.xyz, t, iWeight.y, acc;
+DP3 tn.x, bone[A0.x + 0], iNormal;
+DP3 tn.y, bone[A0.x + 1], iNormal;
+DP3 tn.z, bone[A0.x + 2], iNormal;
+MAD naccum.xyz, tn, iWeight.y, naccum;
+
+# ---- influence 2 ----
+ARL A0.x, iIndex.z;
+DP4 t.x,  bone[A0.x + 0], iPos;
+DP4 t.y,  bone[A0.x + 1], iPos;
+DP4 t.z,  bone[A0.x + 2], iPos;
+MAD acc.xyz, t, iWeight.z, acc;
+DP3 tn.x, bone[A0.x + 0], iNormal;
+DP3 tn.y, bone[A0.x + 1], iNormal;
+DP3 tn.z, bone[A0.x + 2], iNormal;
+MAD naccum.xyz, tn, iWeight.z, naccum;
+
+# ---- influence 3 ----
+ARL A0.x, iIndex.w;
+DP4 t.x,  bone[A0.x + 0], iPos;
+DP4 t.y,  bone[A0.x + 1], iPos;
+DP4 t.z,  bone[A0.x + 2], iPos;
+MAD acc.xyz, t, iWeight.w, acc;
+DP3 tn.x, bone[A0.x + 0], iNormal;
+DP3 tn.y, bone[A0.x + 1], iNormal;
+DP3 tn.z, bone[A0.x + 2], iNormal;
+MAD naccum.xyz, tn, iWeight.w, naccum;
+
+MOV skinned.xyz, acc;
+MOV skinned.w, iPos.w;
+
+# ---- re-normalize the blended normal ----
+DP3 nlen.x, naccum, naccum;
+RSQ nlen.x, nlen.x;
+MUL normal.xyz, naccum, nlen.x;
+
+# ---- clip-space position ----
+DP4 result.position.x, mvp[0], skinned;
+DP4 result.position.y, mvp[1], skinned;
+DP4 result.position.z, mvp[2], skinned;
+DP4 result.position.w, mvp[3], skinned;
+
+# ---- eye-space depth, fog only ----
+DP4 eyeZ.x, modelview[2], skinned;
+MAD fog.x, -eyeZ.x, fogParams.x, fogParams.y;
+MAX fog.x, fog.x, 0.0;
+MIN fog.x, fog.x, 1.0;
+
+# ============================================================================
+# Lighting: ambient init, then 1 directional, then 3 spot, then 4 omni.
+# Straight-line code, no control flow in this language - every light below
+# is fully unrolled.
+# ============================================================================
+
+# ---- ambient ----
+MOV lit.xyz, ambient;
+
+# ---- directional (3 instr) ----
+DP3 ndotl.x, normal, dDir;
+MAX ndotl.x, ndotl.x, 0.0;
+MAD lit.xyz, dColor, ndotl.x, lit;
+
+# ---- spot 0 (14 instr) ----
+SUB lvec.xyz, s0Pos, skinned;
+DP3 distSq.x, lvec, lvec;
+RSQ distSq.x, distSq.x;                    # now holds 1/distance
+MUL ldir.xyz, lvec, distSq.x;
+DP3 ndotl.x, normal, ldir;
+MAX ndotl.x, ndotl.x, 0.0;
+DP3 spotfac.x, -ldir, s0Dir;
+MAD spotfac.x, spotfac.x, s0Fall.x, s0Fall.y;
+MAX spotfac.x, spotfac.x, 0.0;
+MIN spotfac.x, spotfac.x, 1.0;
+MUL atten.x, distSq.x, distSq.x;           # (1/distance)^2 = inverse-square
+MUL ndotl.x, ndotl.x, atten.x;
+MUL ndotl.x, ndotl.x, spotfac.x;
+MAD lit.xyz, s0Color, ndotl.x, lit;
+
+# ---- spot 1 (14 instr) ----
+SUB lvec.xyz, s1Pos, skinned;
+DP3 distSq.x, lvec, lvec;
+RSQ distSq.x, distSq.x;
+MUL ldir.xyz, lvec, distSq.x;
+DP3 ndotl.x, normal, ldir;
+MAX ndotl.x, ndotl.x, 0.0;
+DP3 spotfac.x, -ldir, s1Dir;
+MAD spotfac.x, spotfac.x, s1Fall.x, s1Fall.y;
+MAX spotfac.x, spotfac.x, 0.0;
+MIN spotfac.x, spotfac.x, 1.0;
+MUL atten.x, distSq.x, distSq.x;
+MUL ndotl.x, ndotl.x, atten.x;
+MUL ndotl.x, ndotl.x, spotfac.x;
+MAD lit.xyz, s1Color, ndotl.x, lit;
+
+# ---- spot 2 (14 instr) ----
+SUB lvec.xyz, s2Pos, skinned;
+DP3 distSq.x, lvec, lvec;
+RSQ distSq.x, distSq.x;
+MUL ldir.xyz, lvec, distSq.x;
+DP3 ndotl.x, normal, ldir;
+MAX ndotl.x, ndotl.x, 0.0;
+DP3 spotfac.x, -ldir, s2Dir;
+MAD spotfac.x, spotfac.x, s2Fall.x, s2Fall.y;
+MAX spotfac.x, spotfac.x, 0.0;
+MIN spotfac.x, spotfac.x, 1.0;
+MUL atten.x, distSq.x, distSq.x;
+MUL ndotl.x, ndotl.x, atten.x;
+MUL ndotl.x, ndotl.x, spotfac.x;
+MAD lit.xyz, s2Color, ndotl.x, lit;
+
+# ---- omni 0 (9 instr) ----
+SUB lvec.xyz, o0Pos, skinned;
+DP3 distSq.x, lvec, lvec;
+RSQ distSq.x, distSq.x;
+MUL ldir.xyz, lvec, distSq.x;
+DP3 ndotl.x, normal, ldir;
+MAX ndotl.x, ndotl.x, 0.0;
+MUL atten.x, distSq.x, distSq.x;
+MUL ndotl.x, ndotl.x, atten.x;
+MAD lit.xyz, o0Color, ndotl.x, lit;
+
+# ---- omni 1 (9 instr) ----
+SUB lvec.xyz, o1Pos, skinned;
+DP3 distSq.x, lvec, lvec;
+RSQ distSq.x, distSq.x;
+MUL ldir.xyz, lvec, distSq.x;
+DP3 ndotl.x, normal, ldir;
+MAX ndotl.x, ndotl.x, 0.0;
+MUL atten.x, distSq.x, distSq.x;
+MUL ndotl.x, ndotl.x, atten.x;
+MAD lit.xyz, o1Color, ndotl.x, lit;
+
+# ---- omni 2 (9 instr) ----
+SUB lvec.xyz, o2Pos, skinned;
+DP3 distSq.x, lvec, lvec;
+RSQ distSq.x, distSq.x;
+MUL ldir.xyz, lvec, distSq.x;
+DP3 ndotl.x, normal, ldir;
+MAX ndotl.x, ndotl.x, 0.0;
+MUL atten.x, distSq.x, distSq.x;
+MUL ndotl.x, ndotl.x, atten.x;
+MAD lit.xyz, o2Color, ndotl.x, lit;
+
+# ---- omni 3 (9 instr) ----
+SUB lvec.xyz, o3Pos, skinned;
+DP3 distSq.x, lvec, lvec;
+RSQ distSq.x, distSq.x;
+MUL ldir.xyz, lvec, distSq.x;
+DP3 ndotl.x, normal, ldir;
+MAX ndotl.x, ndotl.x, 0.0;
+MUL atten.x, distSq.x, distSq.x;
+MUL ndotl.x, ndotl.x, atten.x;
+MAD lit.xyz, o3Color, ndotl.x, lit;
+
+# ---- clamp: 8 summed lights clip past 1.0 far more easily than a single
+#      light ever did - cheap, worth it ----
+MIN lit.xyz, lit, 1.0;
+
+# ---- blend lit color with fog color by the fog factor ----
+SUB delta.xyz, lit, fogColor;
+MAD result.color.xyz, fog.x, delta, fogColor;
+MOV result.color.w, 1.0;
+
+# ---- texture coordinate passthrough ----
+MOV result.texcoord[0], iTexCoord;
+
+END

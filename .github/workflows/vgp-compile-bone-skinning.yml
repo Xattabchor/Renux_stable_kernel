@@ -1,0 +1,60 @@
+name: Compile uploaded VGP bone-skinning shader
+
+on:
+  push:
+    paths:
+      - "SGX/VGP/compile-inputs/BoneSkinning10BoneMultiLight.vp"
+      - ".github/workflows/vgp-compile-bone-skinning.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install 32-bit runtime for SDK VGPCompiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            libc6-i386 lib32stdc++6 lib32gcc-s1
+      - name: Run IMG VGP compiler
+        id: compile
+        shell: bash
+        run: |
+          set +e
+          compiler="$GITHUB_WORKSPACE/SGX/SDK_BIN/Graphics_SDK_setuplinux_4_03_00_02/GFX_Linux_SDK/OGLES/SDKPackage/Utilities/VGPCompiler/Linux/VGPCompiler"
+          source="$GITHUB_WORKSPACE/SGX/VGP/compile-inputs/BoneSkinning10BoneMultiLight.vp"
+          results="$RUNNER_TEMP/vgp-compile-results"
+          output="$results/BoneSkinning10BoneMultiLight"
+          mkdir -p "$results"
+          cp "$source" "$results/source.vp"
+          log="$results/compiler.log"
+          echo "Compiler: $compiler"
+          echo "Input: $source"
+          ldd "$compiler" || true
+          "$compiler" "-i$source" "-o$output" -t -target=generic >"$log" 2>&1
+          status=$?
+          cat "$log"
+          echo "\n[VGPCompiler exit code: $status]" | tee -a "$log"
+          if [[ $status -eq 0 && -s "$output.bin" && -s "$output.h" ]]; then
+            echo "compiled=true" >> "$GITHUB_OUTPUT"
+            echo "VGP compilation succeeded; generated .bin and .h outputs." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "compiled=false" >> "$GITHUB_OUTPUT"
+            echo "VGP compilation failed. Full compiler output is attached as an artifact." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit 0
+      - name: Upload source, compiler log, and output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VGP-BoneSkinning10BoneMultiLight
+          path: ${{ runner.temp }}/vgp-compile-results/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Require successful VGP compilation
+        if: always()
+        run: test "${{ steps.compile.outputs.compiled }}" = true
