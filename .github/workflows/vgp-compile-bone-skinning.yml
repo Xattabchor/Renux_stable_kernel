@@ -37,14 +37,28 @@ jobs:
           ldd "$compiler" || true
           "$compiler" "-i$source" "-o$output" -t -target=generic >"$log" 2>&1
           status=$?
+          printf '\n[VGPCompiler exit code: %d]\n' "$status" | tee -a "$log"
           cat "$log"
-          echo "\n[VGPCompiler exit code: $status]" | tee -a "$log"
+          {
+            echo '### VGPCompiler output'
+            echo '```text'
+            cat "$log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
           if [[ $status -eq 0 && -s "$output.bin" && -s "$output.h" ]]; then
             echo "compiled=true" >> "$GITHUB_OUTPUT"
             echo "VGP compilation succeeded; generated .bin and .h outputs." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "compiled=false" >> "$GITHUB_OUTPUT"
             echo "VGP compilation failed. Full compiler output is attached as an artifact." >> "$GITHUB_STEP_SUMMARY"
+            while IFS= read -r line || [[ -n "$line" ]]; do
+              line=${line//'%'/'%25'}
+              line=${line//$'\r'/'%0D'}
+              line=${line//$'\n'/'%0A'}
+              line=${line//':'/'%3A'}
+              line=${line//','/'%2C'}
+              echo "::error title=VGPCompiler diagnostic::$line"
+            done < "$log"
           fi
           exit 0
       - name: Upload source, compiler log, and output
